@@ -1,7 +1,7 @@
 import type { LocalClientPlayer, LocalClientSyncResult } from "./types";
 
 const HELPER_URL = "http://127.0.0.1:3212";
-export const MIN_HELPER_VERSION = 10;
+export const MIN_HELPER_VERSION = 11;
 export const HELPER_DOWNLOAD_URL = "https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe";
 export const HELPER_LAUNCH_URL = "haidou-helper://start";
 let sessionToken = "";

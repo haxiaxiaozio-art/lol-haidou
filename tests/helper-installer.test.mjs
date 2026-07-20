@@ -18,5 +18,5 @@ test("desktop installer is user-scoped and registers launch integration", async 
   assert.match(builder, /NODE_SEA_BLOB/);
   assert.match(client, /releases\/latest\/download\/HaiDouHelperSetup\.exe/);
   assert.match(client, /haidou-helper:\/\/start/);
-  assert.match(client, /MIN_HELPER_VERSION = 10/);
+  assert.match(client, /MIN_HELPER_VERSION = 11/);
 });

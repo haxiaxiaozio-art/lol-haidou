@@ -72,6 +72,22 @@ function augmentIds(participant) {
     .map(String))];
 }
 
+function itemIds(participant) {
+  const stats = participant?.stats ?? participant ?? {};
+  const arrayItems = Array.isArray(participant?.items)
+    ? participant.items
+    : Array.isArray(stats?.items)
+      ? stats.items
+      : [];
+  const candidates = arrayItems.length ? arrayItems : [
+    stats.item0, stats.item1, stats.item2, stats.item3, stats.item4, stats.item5,
+  ];
+  return candidates
+    .map((value) => typeof value === "object" ? firstValue(value?.id, value?.itemId) : value)
+    .filter((value) => value !== undefined && value !== null && String(value) !== "0")
+    .map(String);
+}
+
 function rolesForChampion(champion, participant) {
   const classify = (candidates) => {
     const roles = [];
@@ -101,6 +117,11 @@ function rolesForChampion(champion, participant) {
 function augmentLabel(id, augmentNames) {
   const name = augmentNames?.get?.(String(id)) ?? augmentNames?.[String(id)];
   return name ? String(name) : `海克斯 ${id}`;
+}
+
+function itemLabel(id, itemNames) {
+  const name = itemNames?.get?.(String(id)) ?? itemNames?.[String(id)];
+  return name ? String(name) : `装备 ${id}`;
 }
 
 function isHaidou(game, augments) {
@@ -159,6 +180,7 @@ export function normalizeMatch(game, context) {
       gold: numberValue(stats?.goldEarned),
     },
     augments: augments.map((id) => augmentLabel(id, context.augmentNames)),
+    items: itemIds(participant).map((id) => itemLabel(id, context.itemNames)),
   };
 }
 

@@ -49,9 +49,12 @@ export default defineConfig(async () => {
 
   return {
     base: publicBase,
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    server: {
+      watch: {
+        ignored: ["**/dist/**", "**/pages-dist/**", "**/helper-dist/**", "**/release/**"],
+        ...(isCodexSeatbeltSandbox ? { useFsEvents: false, usePolling: true } : {}),
+      },
+    },
     plugins: [
       vinext(),
       sites(),

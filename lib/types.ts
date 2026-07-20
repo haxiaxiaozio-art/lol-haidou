@@ -33,6 +33,7 @@ export type MatchRecord = {
   assists: number;
   metrics: MatchMetrics;
   augments: string[];
+  items?: string[];
   recall?: RecallRule;
 };
 
@@ -50,10 +51,22 @@ export type PlayerDataset = {
 
 export type LocalClientPlayer = PlayerDataset["player"];
 
+export type NetworkRatingEstimate = {
+  rating: number;
+  low: number;
+  high: number;
+  confidence: number;
+  games: number;
+  wins: number;
+  status: "calibrating" | "provisional" | "stable";
+};
+
 export type LocalClientSyncResult = {
   dataset: PlayerDataset;
   scannedCount: number;
   haidouCount: number;
+  networkRating: NetworkRatingEstimate | null;
+  networkRatingError: string;
 };
 
 export type DimensionScore = {
@@ -84,8 +97,9 @@ export type PlayerSummary = {
   confidence: number;
   wins: number;
   winRate: number;
-  roleScores: Array<{ role: Role; score: number; games: number }>;
+  roleScores: Array<{ role: Role; score: number; reliableScore: number; games: number }>;
   heroes: Array<{ name: string; games: number; wins: number; winRate: number; smoothedWinRate: number }>;
   augments: Array<{ name: string; picks: number; share: number }>;
+  favoriteItems: Array<{ name: string; picks: number; games: number; gameShare: number }>;
   highlights: ScoredMatch[];
 };

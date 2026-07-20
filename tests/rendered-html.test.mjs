@@ -33,6 +33,12 @@ test("renders the HaiDou dashboard", async () => {
   assert.match(html, /职业评分/);
   assert.match(html, /加权后/);
   assert.match(html, /主职业完整计分 \+ 副职业 40% 奖励/);
+  assert.match(html, /战绩扫描上限/);
+  assert.match(html, /前 10 名覆盖/);
+  assert.match(html, /最爱出装/);
+  assert.match(html, /海斗锐评/);
+  assert.match(html, /海斗估算分/);
+  assert.match(html, /第三方估算|同步真实海斗战绩/);
   assert.match(html, /白天|深夜/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
 });
@@ -40,5 +46,7 @@ test("renders the HaiDou dashboard", async () => {
 test("renders local privacy guidance", async () => {
   const response = await render("/privacy");
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /导入文件上传到服务器/);
+  const html = await response.text();
+  assert.match(html, /不会上传到服务器/);
+  assert.match(html, /单向哈希处理/);
 });

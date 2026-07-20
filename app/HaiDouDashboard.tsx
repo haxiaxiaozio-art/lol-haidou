@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
+import { buildMatchCommentary } from "../lib/match-commentary";
 import {
   HELPER_DOWNLOAD_URL,
   HELPER_LAUNCH_URL,
@@ -12,7 +13,7 @@ import {
   type LocalConnectionProbe,
 } from "../lib/local-client";
 import { summarizePlayer } from "../lib/scoring";
-import type { LocalClientPlayer, MatchRecord, PlayerDataset, ScoredMatch } from "../lib/types";
+import type { LocalClientPlayer, MatchRecord, NetworkRatingEstimate, PlayerDataset, ScoredMatch } from "../lib/types";
 import styles from "./page.module.css";
 
 type MatchFilter = "全部" | "胜利" | "失败";
@@ -54,6 +55,12 @@ const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   hour12: false,
 });
 
+const ratingStatusLabel: Record<NetworkRatingEstimate["status"], string> = {
+  calibrating: "校准中",
+  provisional: "初步稳定",
+  stable: "稳定",
+};
+
 const resultLabel = (score: number) => {
   if (score >= 88) return "高光";
   if (score >= 74) return "出色";
@@ -90,6 +97,7 @@ const matchToCsvRow = (match: MatchRecord) => [
   match.metrics.selfHealing,
   match.metrics.gold,
   match.augments.join("|"),
+  (match.items ?? []).join("|"),
   match.recall?.pickedAtMinute ?? "",
   match.recall?.deathsBefore ?? "",
   match.recall?.deathsAfter ?? "",
@@ -106,6 +114,7 @@ function downloadBlob(content: string, type: string, fileName: string) {
 
 function MatchRow({ item }: { item: ScoredMatch }) {
   const match = item.match;
+  const commentary = buildMatchCommentary(item);
   return (
     <article className={styles.matchRow} data-result={match.win ? "win" : "loss"}>
       <div className={styles.matchIdentity}>
@@ -152,6 +161,14 @@ function MatchRow({ item }: { item: ScoredMatch }) {
           正向表现 {item.positiveScore}，生存表现 {item.survivalScore}
           {item.recallApplied ? "，已应用历史回城死亡加权" : "，按普通死亡规则计算"}。
         </p>
+        {Boolean(match.items?.length) && (
+          <div className={styles.matchBuild}><span>本局出装</span>{match.items?.map((equipment) => <b key={equipment}>{equipment}</b>)}</div>
+        )}
+        <div className={styles.matchCommentary}>
+          <span>海斗锐评 · 参战 {commentary.participation}</span>
+          <strong>{commentary.verdict}</strong>
+          <p>{commentary.improvement}</p>
+        </div>
       </details>
     </article>
   );
@@ -174,6 +191,7 @@ export default function HaiDouDashboard() {
   const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
   const [importMessage, setImportMessage] = useState("尚未导入文件，当前展示完整演示数据。");
   const [importError, setImportError] = useState("");
+  const [networkRating, setNetworkRating] = useState<NetworkRatingEstimate | null>(null);
   const summary = useMemo(() => summarizePlayer(dataset), [dataset]);
   const isFlowBusy = ["resolving", "syncing", "scoring"].includes(flowStatus);
   const activeStep = flowStatus === "ready" ? 3 : flowStatus === "connected" || isFlowBusy ? 2 : 1;
@@ -208,6 +226,7 @@ export default function HaiDouDashboard() {
     try {
       const imported = await importDataset(file);
       setDataset(imported);
+      setNetworkRating(null);
       setFilter("全部");
       setFlowStatus("ready");
       setFlowDetail(`本地文件已提供 ${imported.matches.length} 场对局`);
@@ -222,6 +241,7 @@ export default function HaiDouDashboard() {
 
   const resetDemo = () => {
     setDataset(DEMO_DATASET);
+    setNetworkRating(null);
     setRegion(DEMO_DATASET.player.region);
     setGameName(DEMO_DATASET.player.gameName);
     setTagLine(DEMO_DATASET.player.tag);
@@ -325,6 +345,7 @@ export default function HaiDouDashboard() {
       setFlowDetail(`已找到 ${result.haidouCount} 场海斗对局，正在计算评分`);
       await wait(160);
       setDataset(result.dataset);
+      setNetworkRating(result.networkRating);
       setLocalPlayer(result.dataset.player);
       setGameName(result.dataset.player.gameName);
       setTagLine(result.dataset.player.tag);
@@ -373,6 +394,7 @@ export default function HaiDouDashboard() {
       setFlowDetail(`已找到 ${result.haidouCount} 场海斗对局，正在计算评分`);
       await wait(160);
       setDataset(result.dataset);
+      setNetworkRating(result.networkRating);
       setFilter("全部");
       setFlowStatus("ready");
       setFlowDetail(`读取 ${result.scannedCount} 场战绩，筛选并导入 ${result.haidouCount} 场海斗对局`);
@@ -426,6 +448,7 @@ export default function HaiDouDashboard() {
       matches: DEMO_DATASET.matches.slice(0, availableMatchCount),
     };
     setDataset(nextDataset);
+    setNetworkRating(null);
     setFilter("全部");
     setImportMessage(`已用演示对局生成 ${normalizedName}#${normalizedTag} 的流程预览。`);
     setFlowStatus("ready");
@@ -454,10 +477,18 @@ export default function HaiDouDashboard() {
   const visibleMatches = summary.scoredMatches.filter((item) =>
     filter === "全部" ? true : filter === "胜利" ? item.match.win : !item.match.win,
   );
-  const eligibleHeroes = summary.heroes.filter((hero) => hero.games >= 5);
-  const bestHero = [...eligibleHeroes].sort((a, b) => b.smoothedWinRate - a.smoothedWinRate)[0];
-  const worstHero = [...eligibleHeroes].sort((a, b) => a.smoothedWinRate - b.smoothedWinRate)[0];
-  const topRole = [...summary.roleScores].sort((a, b) => b.score - a.score)[0];
+  const heroMinimumGames = Math.max(5, Math.min(12, Math.ceil(dataset.matches.length * 0.06)));
+  const eligibleHeroes = summary.heroes.filter((hero) => hero.games >= heroMinimumGames);
+  const bestHero = [...eligibleHeroes].sort((a, b) => b.smoothedWinRate - a.smoothedWinRate || b.games - a.games)[0];
+  const worstHero = [...eligibleHeroes].sort((a, b) => a.smoothedWinRate - b.smoothedWinRate || b.games - a.games)[0];
+  const topRole = [...summary.roleScores].filter((role) => role.games > 0).sort((a, b) => b.reliableScore - a.reliableScore || b.games - a.games)[0];
+  const displayedHeroes = summary.heroes.slice(0, 10);
+  const displayedHeroGames = displayedHeroes.reduce((total, hero) => total + hero.games, 0);
+  const displayedAugments = summary.augments.slice(0, 12);
+  const totalAugmentPicks = summary.augments.reduce((total, augment) => total + augment.picks, 0);
+  const displayedAugmentPicks = displayedAugments.reduce((total, augment) => total + augment.picks, 0);
+  const topAugmentPicks = displayedAugments[0]?.picks ?? 1;
+  const displayedItems = summary.favoriteItems.slice(0, 10);
 
   return (
     <>
@@ -528,7 +559,7 @@ export default function HaiDouDashboard() {
                   <span className={styles.tagInput}><b>#</b><input value={tagLine} onChange={(event) => setTagLine(event.target.value)} placeholder="0927" disabled={isFlowBusy} /></span>
                 </label>
                 <label>
-                  <span>最近场次</span>
+                  <span>战绩扫描上限</span>
                   <select value={matchCount} onChange={(event) => setMatchCount(Number(event.target.value))} disabled={isFlowBusy}>
                     <option value={20}>20 场</option>
                     <option value={40}>40 场</option>
@@ -583,7 +614,7 @@ export default function HaiDouDashboard() {
                     <span className={styles.tagInput}><b>#</b><input value={searchTagLine} onChange={(event) => setSearchTagLine(event.target.value)} placeholder="例如 0927" disabled={isFlowBusy} autoComplete="off" /></span>
                   </label>
                   <label>
-                    <span>最近场次</span>
+                    <span>战绩扫描上限</span>
                     <select value={matchCount} onChange={(event) => setMatchCount(Number(event.target.value))} disabled={isFlowBusy}>
                       <option value={20}>20 场</option>
                       <option value={40}>40 场</option>
@@ -622,7 +653,7 @@ export default function HaiDouDashboard() {
                   <button className={styles.queryButton} type="button" onClick={runLocalSync} disabled={!localPlayer || isFlowBusy}>
                     {flowStatus === "syncing" || flowStatus === "scoring" ? "正在导入" : "筛选海斗并生成评分"}
                   </button>
-                  <p>按所选上限读取最近战绩，仅保留带海克斯强化的极地大乱斗对局。</p>
+                  <p>所选数字是全部模式的战绩扫描上限，统计只保留其中带海克斯强化的极地大乱斗对局。</p>
                 </div>
                 {lookupError && <p className={styles.lookupError} role="alert">{lookupError}</p>}
               </div>
@@ -652,13 +683,20 @@ export default function HaiDouDashboard() {
               <small>置信度 {summary.confidence}%</small>
             </div>
             <p>{summary.overallScore && summary.overallScore >= 70 ? "强项清晰，继续降低关键死亡。" : "先累积更多对局，再观察稳定表现。"}</p>
+            <div className={styles.networkScore}>
+              <span>海斗估算分</span>
+              <strong>{networkRating?.rating ?? "--"}</strong>
+              <small>{networkRating ? `${networkRating.low}–${networkRating.high}` : "需客户端同步"}</small>
+              <em>{networkRating ? `${ratingStatusLabel[networkRating.status]} · 可信度 ${networkRating.confidence}% · ${networkRating.games} 场` : "胜负与对手强度模型"}</em>
+            </div>
+            <small className={styles.networkNotice}>{networkRating ? "第三方估算，不是 Riot 官方 MMR" : "同步真实海斗战绩后生成网络估算"}</small>
           </div>
 
           <dl className={styles.snapshotStats}>
             <div><dt>可分析场次</dt><dd>{dataset.matches.length}</dd></div>
             <div><dt>胜率</dt><dd>{summary.winRate}<span>%</span></dd></div>
             <div><dt>数据高光局</dt><dd>{summary.highlights.length}</dd></div>
-            <div><dt>最强职业</dt><dd className={styles.textValue}>{topRole?.games ? topRole.role : "样本不足"}</dd></div>
+            <div><dt>最强职业</dt><dd className={styles.textValue} title={topRole ? `场次稳健指数 ${topRole.reliableScore}` : undefined}>{topRole?.role ?? "样本不足"}{topRole && <span>{topRole.games} 局</span>}</dd></div>
           </dl>
         </section>
 
@@ -666,7 +704,7 @@ export default function HaiDouDashboard() {
           <div className={styles.rolePanel}>
             <div className={styles.sectionHeading}>
               <div><span>职业雷达</span><h2>六类英雄表现</h2></div>
-              <small>同类模型得分</small>
+              <small>均分展示，最强职业按场次收缩</small>
             </div>
             <div className={styles.roleBars}>
               {summary.roleScores.map((role) => (
@@ -682,7 +720,7 @@ export default function HaiDouDashboard() {
           <div className={styles.heroPanel}>
             <div className={styles.sectionHeading}>
               <div><span>英雄池</span><h2>使用与胜负</h2></div>
-              <small>至少 5 局才进入常胜评估</small>
+              <small>本次至少 {heroMinimumGames} 局才进入常胜评估</small>
             </div>
             <div className={styles.heroVerdicts}>
               <div><span>常胜英雄</span><strong>{bestHero?.name ?? "样本不足"}</strong><small>{bestHero ? `${bestHero.games} 局 · ${bestHero.winRate}% 胜率` : "需要更多场次"}</small></div>
@@ -691,11 +729,12 @@ export default function HaiDouDashboard() {
             <table className={styles.heroTable}>
               <thead><tr><th>英雄</th><th>场次</th><th>胜场</th><th>胜率</th></tr></thead>
               <tbody>
-                {summary.heroes.slice(0, 6).map((hero) => (
+                {displayedHeroes.map((hero) => (
                   <tr key={hero.name}><td>{hero.name}</td><td>{hero.games}</td><td>{hero.wins}</td><td>{hero.winRate}%</td></tr>
                 ))}
               </tbody>
             </table>
+            <p className={styles.rankCoverage}>已统计 {summary.heroes.length} 名英雄、{dataset.matches.length} 场海斗。表内前 10 名覆盖 {displayedHeroGames} 场，其余合计 {Math.max(0, dataset.matches.length - displayedHeroGames)} 场。</p>
           </div>
         </section>
 
@@ -710,7 +749,7 @@ export default function HaiDouDashboard() {
                 <article key={item.match.id}>
                   <span>0{index + 1}</span>
                   <div><strong>{item.match.champion}</strong><small>{roleLabel(item.match)} · {item.match.kills}/{item.match.deaths}/{item.match.assists}</small></div>
-                  <p>{item.dimensions.sort((a, b) => b.score - a.score)[0]?.label} {Math.max(...item.dimensions.map((dimension) => dimension.score))} 分</p>
+                  <p>{[...item.dimensions].sort((a, b) => b.score - a.score)[0]?.label} {Math.max(...item.dimensions.map((dimension) => dimension.score))} 分</p>
                   <b>{item.score}</b>
                 </article>
               ))}
@@ -724,15 +763,36 @@ export default function HaiDouDashboard() {
             <small>仅展示频次，不展示胜率</small>
           </div>
           <div className={styles.augmentRank}>
-            {summary.augments.map((augment, index) => (
+            {displayedAugments.map((augment, index) => (
               <div key={augment.name}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <strong>{augment.name}</strong>
-                <div className={styles.miniTrack}><span style={{ width: `${Math.min(100, augment.share * 4)}%` }} /></div>
+                <div className={styles.miniTrack}><span style={{ width: `${Math.round((augment.picks / topAugmentPicks) * 100)}%` }} /></div>
                 <small>{augment.picks} 次</small>
               </div>
             ))}
+            <p className={styles.rankCoverage}>共统计 {summary.augments.length} 种海克斯、{totalAugmentPicks} 次选择。前 12 项覆盖 {displayedAugmentPicks} 次。</p>
           </div>
+        </section>
+
+        <section className={styles.itemSection} aria-labelledby="items-title">
+          <div className={styles.sectionHeading}>
+            <div><span>装备偏好</span><h2 id="items-title">最爱出装</h2></div>
+            <small>按出现对局数排序，重复购买另计件数</small>
+          </div>
+          {displayedItems.length ? (
+            <div className={styles.itemRank}>
+              {displayedItems.map((equipment, index) => (
+                <div key={equipment.name}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{equipment.name}</strong>
+                  <div className={styles.miniTrack}><span style={{ width: `${equipment.gameShare}%` }} /></div>
+                  <small>{equipment.games} 局 · {equipment.gameShare}%</small>
+                </div>
+              ))}
+              <p className={styles.rankCoverage}>基于 {dataset.matches.length} 场海斗的最终装备栏统计。消耗品和未完成的小件也会按客户端记录保留。</p>
+            </div>
+          ) : <p className={styles.emptyState}>当前导入数据没有装备字段。使用 V11 数据助手重新同步后即可生成出装偏好。</p>}
         </section>
 
         <section className={styles.matchesSection} aria-labelledby="matches-title">
@@ -759,7 +819,7 @@ export default function HaiDouDashboard() {
       </main>
 
       <footer className={styles.footer}>
-        <span>海斗战报 MVP · 数据仅在当前浏览器处理</span>
+        <span>海斗战报 MVP · 操作与出装分析在本机完成 · 网络估算仅上传匿名胜负关系</span>
         <nav aria-label="页脚"><a href="./privacy/">隐私说明</a><a href="./terms/">使用边界</a></nav>
       </footer>
     </>

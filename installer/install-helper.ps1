@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-$productVersion = "0.2.0"
+$productVersion = "0.3.0"
 $sourceDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDirectory = Join-Path $env:LOCALAPPDATA "HaiDouHelper"
 $helperPath = Join-Path $installDirectory "HaiDouHelper.exe"
 $launcherPath = Join-Path $installDirectory "start-hidden.vbs"
-$websiteUrl = "https://haxiaxiaozio-art.github.io/lol-haidou/?v=4"
+$websiteUrl = "https://haxiaxiaozio-art.github.io/lol-haidou/?v=5"
 
 function Stop-HaiDouHelper {
   try {

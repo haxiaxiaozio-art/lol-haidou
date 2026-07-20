@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "HAIDOU_SITE=https://haxiaxiaozio-art.github.io/lol-haidou/?v=4"
+set "HAIDOU_SITE=https://haxiaxiaozio-art.github.io/lol-haidou/?v=5"
 
 where node >nul 2>nul
 if errorlevel 1 goto missing_node
@@ -23,7 +23,7 @@ pause
 exit /b 0
 
 :helper_ready
-powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 10) { exit 0 }; exit 1 } catch { exit 1 }"
+powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 11) { exit 0 }; exit 1 } catch { exit 1 }"
 exit /b %errorlevel%
 
 :missing_node

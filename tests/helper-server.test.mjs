@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createHaidouHelper } from "../helper/server.mjs";
-import { augmentMap, gameBelongsToPlayer, normalizeSearchIdentity, parseCommandLine, parseHistoryGameIds } from "../helper/lcu.mjs";
+import { augmentMap, gameBelongsToPlayer, itemMap, normalizeSearchIdentity, parseCommandLine, parseHistoryGameIds } from "../helper/lcu.mjs";
 import { normalizeHistory } from "../helper/normalize.mjs";
 
 test("champion primary class wins over Tencent ARAM timeline support", () => {
@@ -86,6 +86,11 @@ test("LCU command line parser tolerates protected process fields", async () => {
   assert.doesNotMatch(launcher, /\^\| Select-Object/);
 });
 
+test("maps local client item ids to localized names", () => {
+  const names = itemMap([{ id: 3031, name: "无尽之刃" }]);
+  assert.equal(names.get("3031"), "无尽之刃");
+});
+
 test("normalizes an exact Riot ID before player lookup", () => {
   assert.deepEqual(normalizeSearchIdentity("  夜航船  ", "#0927"), {
     gameName: "夜航船",
@@ -110,7 +115,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 10);
+  assert.equal(healthBody.version, 11);
   assert.equal(healthBody.installMode, "node");
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });

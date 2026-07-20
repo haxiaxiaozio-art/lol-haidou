@@ -4,6 +4,7 @@ import https from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
 import { buildPlayerDataset, extractGames, normalizeHistory } from "./normalize.mjs";
+import { buildRatingGraph, submitRatingGraph } from "./rating-network.mjs";
 
 const execFileAsync = promisify(execFile);
 const POWER_SHELL = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
@@ -273,6 +274,16 @@ export async function getCurrentPlayer() {
   };
 }
 
+export function itemMap(payload) {
+  const map = new Map();
+  for (const item of Array.isArray(payload) ? payload : Object.values(payload ?? {})) {
+    const id = item?.id ?? item?.itemId;
+    const name = item?.name ?? item?.nameTRA ?? item?.localizedName;
+    if (id !== undefined && name) map.set(String(id), String(name));
+  }
+  return map;
+}
+
 export function normalizeSearchIdentity(gameName, tagLine) {
   const normalizedName = String(gameName ?? "").trim();
   const normalizedTag = String(tagLine ?? "").trim().replace(/^#/, "");
@@ -367,20 +378,33 @@ function validatedMatchCount(requestedCount) {
 }
 
 async function buildHistoryResult(credentials, player, region, count) {
-  const [scanned, championPayload, augmentPayload] = await Promise.all([
+  const [scanned, championPayload, augmentPayload, itemPayload] = await Promise.all([
     historyGames(credentials, player, count),
     optionalRequest(credentials, "/lol-game-data/assets/v1/champion-summary.json", []),
     optionalRequest(credentials, "/lol-game-data/assets/v1/cherry-augments.json", []),
+    optionalRequest(credentials, "/lol-game-data/assets/v1/items.json", []),
   ]);
   const matches = normalizeHistory([scanned], {
     player,
     champions: championMap(championPayload),
     augmentNames: augmentMap(augmentPayload),
+    itemNames: itemMap(itemPayload),
   });
+  let networkRating = null;
+  let networkRatingError = "";
+  try {
+    const regionCode = credentials.platformId ?? region?.webRegion ?? region?.region;
+    const graph = buildRatingGraph(scanned, player, regionCode, matches.map((match) => match.id));
+    networkRating = await submitRatingGraph(graph);
+  } catch (error) {
+    networkRatingError = error instanceof Error ? error.message : "网络估算服务暂时不可用";
+  }
   return {
     dataset: buildPlayerDataset({ player, region, matches }),
     scannedCount: scanned.length,
     haidouCount: matches.length,
+    networkRating,
+    networkRatingError,
   };
 }
 

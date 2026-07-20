@@ -1,6 +1,6 @@
 {
   "name": "lol-haidou-mvp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -13,10 +13,12 @@
     "build": "vinext build",
     "export:pages": "node scripts/export-pages.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/helper-installer.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs",
+    "db:generate": "drizzle-kit generate",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/helper-installer.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs tests/player-summary.test.mjs tests/match-commentary.test.mjs tests/network-rating.test.mjs tests/rating-graph.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern helper-dist --ignore-pattern release"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
@@ -29,6 +31,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",

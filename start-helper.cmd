@@ -23,7 +23,7 @@ pause
 exit /b %HAIDOU_EXIT%
 
 :helper_ready
-powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 10) { exit 0 }; exit 1 } catch { exit 1 }"
+powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 11) { exit 0 }; exit 1 } catch { exit 1 }"
 exit /b %errorlevel%
 
 :stop_legacy_helper
@@ -41,7 +41,7 @@ goto launch_helper
 
 :already_running
 echo HaiDou local data helper is already running at http://127.0.0.1:3212
-echo Open https://haxiaxiaozio-art.github.io/lol-haidou/?v=4 to check LOL login status.
+echo Open https://haxiaxiaozio-art.github.io/lol-haidou/?v=5 to check LOL login status.
 pause
 exit /b 0
 

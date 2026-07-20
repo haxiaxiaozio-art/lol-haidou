@@ -4,7 +4,7 @@
 
 ## 在线版本
 
-[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=4)
+[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=5)
 
 在线网站可以直接体验演示数据和 CSV/JSON 导入。读取真实 LOL 战绩时，在同一台 Windows 电脑上安装[海斗数据助手](https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe)，并在浏览器提示时允许访问本地网络。普通玩家不再需要安装 Node.js，也不需要下载源码。
 

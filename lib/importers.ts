@@ -57,6 +57,9 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
   const augments = Array.isArray(value.augments)
     ? value.augments.map(String).filter(Boolean)
     : String(value.augments ?? "").split(/[|；;]/).map((item) => item.trim()).filter(Boolean);
+  const items = Array.isArray(value.items)
+    ? value.items.map(String).filter(Boolean)
+    : String(value.items ?? "").split(/[|；;]/).map((item) => item.trim()).filter(Boolean);
   const recallMinute = value.recallPickMinute ?? value.recall_pick_minute;
   const hasRecall = recallMinute !== undefined && recallMinute !== null && String(recallMinute) !== "";
   return {
@@ -82,6 +85,7 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
       gold: numberValue(value.gold ?? (value.metrics as Record<string, unknown> | undefined)?.gold, "经济"),
     },
     augments,
+    items,
     recall: hasRecall
       ? {
           pickedAtMinute: numberValue(recallMinute, "回城选择时间"),
@@ -141,6 +145,7 @@ export const CSV_HEADERS = [
   ...REQUIRED_HEADERS.slice(0, 5),
   "secondary_role",
   ...REQUIRED_HEADERS.slice(5),
+  "items",
   "recall_pick_minute",
   "deaths_before_recall",
   "deaths_after_recall",

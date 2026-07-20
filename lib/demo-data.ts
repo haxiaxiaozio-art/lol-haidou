@@ -9,6 +9,7 @@ type Seed = {
   deaths: number;
   assists: number;
   augments: string[];
+  items: string[];
 };
 
 const seeds: Seed[] = [
@@ -21,6 +22,7 @@ const seeds: Seed[] = [
     deaths: 4,
     assists: 31,
     augments: ["音浪叠叠", "急救用具", "黎明使者的决心"],
+    items: ["月石再生器", "炽热香炉", "流水法杖", "明朗之靴", "救赎"],
   },
   {
     champion: "维克托",
@@ -30,6 +32,7 @@ const seeds: Seed[] = [
     deaths: 7,
     assists: 19,
     augments: ["珠光护手", "魔法飞弹", "会心防守"],
+    items: ["卢登的伙伴", "影焰", "灭世者的死亡之帽", "法师之靴", "虚空之杖"],
   },
   {
     champion: "阿卡丽",
@@ -40,6 +43,7 @@ const seeds: Seed[] = [
     deaths: 8,
     assists: 11,
     augments: ["暗影疾奔", "终结者", "全凭身法"],
+    items: ["海克斯科技火箭腰带", "影焰", "中娅沙漏", "法师之靴", "虚空之杖"],
   },
   {
     champion: "奥恩",
@@ -50,6 +54,7 @@ const seeds: Seed[] = [
     deaths: 7,
     assists: 27,
     augments: ["巨像勇气", "坦克引擎", "不动如山"],
+    items: ["心之钢", "日炎圣盾", "荆棘之甲", "狂徒铠甲", "水银之靴"],
   },
   {
     champion: "金克丝",
@@ -59,6 +64,7 @@ const seeds: Seed[] = [
     deaths: 7,
     assists: 16,
     augments: ["连发炮台", "灵巧", "暴击大师"],
+    items: ["海妖杀手", "无尽之刃", "卢安娜的飓风", "多米尼克领主的致意", "狂战士胫甲"],
   },
   {
     champion: "亚托克斯",
@@ -69,6 +75,7 @@ const seeds: Seed[] = [
     deaths: 8,
     assists: 17,
     augments: ["越战越勇", "吸血习性", "重拳出击"],
+    items: ["星蚀", "焚天", "死亡之舞", "振奋盔甲", "铁板靴"],
   },
 ];
 
@@ -112,6 +119,7 @@ const matches: MatchRecord[] = seeds.flatMap((seed, seedIndex) =>
       augments: seed.augments.map((augment, index) =>
         index === 2 && repeatIndex % 2 === 1 ? "珍藏刷新" : augment,
       ),
+      items: seed.items,
     };
   }),
 );
@@ -130,6 +138,7 @@ matches.push({
   assists: 32,
   metrics: { damage: 22410, controlSeconds: 94, healing: 0, shielding: 6840, mitigated: 48620, damageTaken: 61820, selfHealing: 7210, gold: 14640 },
   augments: ["坦克引擎", "作弊：我能回城！", "巨像勇气"],
+  items: ["心之钢", "日炎圣盾", "荆棘之甲", "狂徒铠甲", "水银之靴"],
   recall: { pickedAtMinute: 8.6, deathsBefore: 4, deathsAfter: 2 },
 });
 

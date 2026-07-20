@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { ROLES } from "./types";
 import { combineRoleScores } from "./role-scoring.mjs";
+import { aggregatePlayerPreferences, reliableRoleScore } from "./player-summary.mjs";
 
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
@@ -161,39 +162,18 @@ export function summarizePlayer(dataset: PlayerDataset): PlayerSummary {
 
   const roleScores = ROLES.map((role) => {
     const roleMatches = scoredMatches.filter((item) => item.match.role === role);
+    const score = roleMatches.length
+      ? Math.round(roleMatches.reduce((sum, item) => sum + item.score, 0) / roleMatches.length)
+      : 0;
     return {
       role,
       games: roleMatches.length,
-      score: roleMatches.length
-        ? Math.round(roleMatches.reduce((sum, item) => sum + item.score, 0) / roleMatches.length)
-        : 0,
+      score,
+      reliableScore: reliableRoleScore(score, roleMatches.length),
     };
   });
 
-  const heroMap = new Map<string, { games: number; wins: number }>();
-  const augmentMap = new Map<string, number>();
-  dataset.matches.forEach((match) => {
-    const hero = heroMap.get(match.champion) ?? { games: 0, wins: 0 };
-    hero.games += 1;
-    hero.wins += Number(match.win);
-    heroMap.set(match.champion, hero);
-    match.augments.forEach((augment) => augmentMap.set(augment, (augmentMap.get(augment) ?? 0) + 1));
-  });
-
-  const heroes = [...heroMap.entries()]
-    .map(([name, stat]) => ({
-      name,
-      ...stat,
-      winRate: Math.round((stat.wins / stat.games) * 100),
-      smoothedWinRate: ((stat.wins + 5) / (stat.games + 10)) * 100,
-    }))
-    .sort((a, b) => b.games - a.games || b.smoothedWinRate - a.smoothedWinRate);
-
-  const totalAugmentPicks = [...augmentMap.values()].reduce((sum, value) => sum + value, 0);
-  const augments = [...augmentMap.entries()]
-    .map(([name, picks]) => ({ name, picks, share: Math.round((picks / Math.max(totalAugmentPicks, 1)) * 100) }))
-    .sort((a, b) => b.picks - a.picks)
-    .slice(0, 10);
+  const { heroes, augments, favoriteItems } = aggregatePlayerPreferences(dataset.matches);
 
   return {
     scoredMatches,
@@ -205,6 +185,7 @@ export function summarizePlayer(dataset: PlayerDataset): PlayerSummary {
     roleScores,
     heroes,
     augments,
+    favoriteItems,
     highlights: scoredMatches.filter((item) => item.score >= 88).slice(0, 5),
   };
 }
