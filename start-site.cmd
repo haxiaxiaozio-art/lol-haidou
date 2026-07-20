@@ -23,7 +23,7 @@ pause
 exit /b 0
 
 :helper_ready
-powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 5) { exit 0 }; exit 1 } catch { exit 1 }"
+powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1; if ($health.service -eq 'haidou-local-helper' -and $health.version -ge 6) { exit 0 }; exit 1 } catch { exit 1 }"
 exit /b %errorlevel%
 
 :missing_node

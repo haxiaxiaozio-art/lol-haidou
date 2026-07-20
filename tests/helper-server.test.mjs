@@ -3,6 +3,50 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createHaidouHelper } from "../helper/server.mjs";
 import { parseCommandLine } from "../helper/lcu.mjs";
+import { normalizeHistory } from "../helper/normalize.mjs";
+
+test("champion primary class wins over Tencent ARAM timeline support", () => {
+  const player = { puuid: "player-puuid" };
+  const participant = {
+    participantId: 1,
+    championId: 67,
+    timeline: { role: "SUPPORT" },
+    stats: { playerAugment1: 311 },
+  };
+  const [match] = normalizeHistory([{ games: { games: [{
+    gameId: 103,
+    gameMode: "ARAM",
+    participantIdentities: [{ participantId: 1, player }],
+    participants: [participant],
+  }] } }], {
+    player,
+    champions: new Map([["67", { name: "暗夜猎手", roles: ["marksman", "assassin"] }]]),
+    augmentNames: new Map([["311", "终极刷新"]]),
+  });
+
+  assert.equal(match.role, "射手");
+});
+
+test("uses match position only when champion classes are missing", () => {
+  const player = { puuid: "player-puuid" };
+  const [match] = normalizeHistory([{ games: { games: [{
+    gameId: 104,
+    gameMode: "ARAM",
+    participantIdentities: [{ participantId: 1, player }],
+    participants: [{
+      participantId: 1,
+      championId: 999,
+      timeline: { role: "SUPPORT" },
+      stats: { playerAugment1: 311 },
+    }],
+  }] } }], {
+    player,
+    champions: new Map([["999", { name: "未知英雄", roles: [] }]]),
+    augmentNames: new Map([["311", "终极刷新"]]),
+  });
+
+  assert.equal(match.role, "辅助");
+});
 
 test("LCU command line parser tolerates protected process fields", async () => {
   assert.equal(parseCommandLine(null), null);
@@ -38,7 +82,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 5);
+  assert.equal(healthBody.version, 6);
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });
   assert.equal(blocked.status, 403);

@@ -7,7 +7,7 @@ const ROLE_MAP = {
   fighter: "战士",
 };
 
-const ROLE_PRIORITY = ["support", "mage", "assassin", "tank", "marksman", "fighter"];
+const ROLE_KEYS = ["support", "mage", "assassin", "tank", "marksman", "fighter"];
 
 const numberValue = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -73,14 +73,24 @@ function augmentIds(participant) {
 }
 
 function roleForChampion(champion, participant) {
-  const rawRoles = [
-    ...(Array.isArray(champion?.roles) ? champion.roles : []),
-    participant?.timeline?.role,
+  const classifyFirst = (candidates) => {
+    for (const value of candidates) {
+      if (!value) continue;
+      const candidate = String(value).toLowerCase();
+      const selected = ROLE_KEYS.find((role) => candidate.includes(role));
+      if (selected) return ROLE_MAP[selected];
+    }
+    return null;
+  };
+
+  const championRole = classifyFirst(Array.isArray(champion?.roles) ? champion.roles : []);
+  if (championRole) return championRole;
+
+  return classifyFirst([
     participant?.teamPosition,
     participant?.individualPosition,
-  ].filter(Boolean).map((role) => String(role).toLowerCase());
-  const selected = ROLE_PRIORITY.find((role) => rawRoles.some((candidate) => candidate.includes(role)));
-  return ROLE_MAP[selected] ?? "战士";
+    participant?.timeline?.role,
+  ]) ?? "战士";
 }
 
 function augmentLabel(id, augmentNames) {
