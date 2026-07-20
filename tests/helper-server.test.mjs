@@ -20,6 +20,7 @@ test("LCU command line parser tolerates protected process fields", async () => {
   assert.match(launcher, /-Verb RunAs/);
   assert.match(launcher, /taskkill\.exe/);
   assert.doesNotMatch(launcher, /-FilePath '%HAIDOU_NODE%'/);
+  assert.doesNotMatch(launcher, /\^\| Select-Object/);
 });
 
 test("local helper exposes health and protects private routes", async (context) => {

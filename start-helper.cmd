@@ -31,7 +31,7 @@ powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestM
 exit /b %errorlevel%
 
 :elevated_stop
-for /f "delims=" %%P in ('powershell.exe -NoProfile -NonInteractive -Command "$connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue ^| Select-Object -First 1; if ($null -ne $connection) { Write-Output $connection.OwningProcess }"') do set "HAIDOU_OLD_PID=%%P"
+for /f "delims=" %%P in ('powershell.exe -NoProfile -NonInteractive -Command "$connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -ne $connection) { Write-Output $connection.OwningProcess }"') do set "HAIDOU_OLD_PID=%%P"
 if not defined HAIDOU_OLD_PID goto port_conflict
 echo Windows needs permission once to replace the older HaiDou helper.
 powershell.exe -NoProfile -NonInteractive -Command "try { $process = Start-Process -Verb RunAs -Wait -WindowStyle Hidden -FilePath 'taskkill.exe' -ArgumentList '/PID','%HAIDOU_OLD_PID%','/F' -PassThru; exit $process.ExitCode } catch { exit 1 }"
