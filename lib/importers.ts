@@ -49,6 +49,9 @@ const booleanValue = (value: unknown) =>
 const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRecord => {
   const role = String(value.role ?? "") as Role;
   if (!ROLES.includes(role)) throw new Error(`第 ${index + 1} 局职业必须是：${ROLES.join("、")}`);
+  const secondaryRoleValue = value.secondaryRole ?? value.secondary_role;
+  const secondaryRole = secondaryRoleValue ? String(secondaryRoleValue) as Role : undefined;
+  if (secondaryRole && !ROLES.includes(secondaryRole)) throw new Error(`第 ${index + 1} 局副职业必须是：${ROLES.join("、")}`);
   const durationMinutes = numberValue(value.durationMinutes ?? value.duration_minutes, "对局时长");
   if (durationMinutes <= 0) throw new Error(`第 ${index + 1} 局对局时长必须大于 0`);
   const augments = Array.isArray(value.augments)
@@ -62,6 +65,7 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
     patch: String(value.patch ?? "未知"),
     champion: String(value.champion ?? "未知英雄"),
     role,
+    secondaryRole: secondaryRole === role ? undefined : secondaryRole,
     win: booleanValue(value.win),
     durationMinutes,
     kills: numberValue(value.kills, "击杀"),
@@ -133,4 +137,11 @@ export async function importDataset(file: File): Promise<PlayerDataset> {
   return extension === "json" ? parseJson(text) : parseCsv(text);
 }
 
-export const CSV_HEADERS = [...REQUIRED_HEADERS, "recall_pick_minute", "deaths_before_recall", "deaths_after_recall"];
+export const CSV_HEADERS = [
+  ...REQUIRED_HEADERS.slice(0, 5),
+  "secondary_role",
+  ...REQUIRED_HEADERS.slice(5),
+  "recall_pick_minute",
+  "deaths_before_recall",
+  "deaths_after_recall",
+];

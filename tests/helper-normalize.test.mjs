@@ -39,7 +39,7 @@ test("normalizes the current player and keeps only augment ARAM matches", () => 
     { ...baseGame, gameId: 102, participants: [participant(0)] },
   ] } }], {
     player,
-    champions: new Map([["22", { name: "艾希", roles: ["Marksman"] }]]),
+    champions: new Map([["22", { name: "艾希", roles: ["Marksman", "Assassin"] }]]),
     augmentNames: new Map([["311", "终极刷新"]]),
   });
 
@@ -47,6 +47,7 @@ test("normalizes the current player and keeps only augment ARAM matches", () => 
   assert.equal(matches[0].id, "101");
   assert.equal(matches[0].champion, "艾希");
   assert.equal(matches[0].role, "射手");
+  assert.equal(matches[0].secondaryRole, "刺客");
   assert.deepEqual(matches[0].augments, ["终极刷新"]);
   assert.equal(matches[0].metrics.damage, 32100);
   assert.equal(matches[0].durationMinutes, 20);

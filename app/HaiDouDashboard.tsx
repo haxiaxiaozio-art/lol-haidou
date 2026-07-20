@@ -53,6 +53,9 @@ const resultLabel = (score: number) => {
   return "待复盘";
 };
 
+const roleLabel = (match: MatchRecord) =>
+  match.secondaryRole ? `${match.role} / ${match.secondaryRole}` : match.role;
+
 const csvEscape = (value: string | number | boolean) => {
   const text = String(value);
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -64,6 +67,7 @@ const matchToCsvRow = (match: MatchRecord) => [
   match.patch,
   match.champion,
   match.role,
+  match.secondaryRole ?? "",
   match.win,
   match.durationMinutes,
   match.kills,
@@ -100,7 +104,7 @@ function MatchRow({ item }: { item: ScoredMatch }) {
         <span className={styles.championMark} aria-hidden="true">{match.champion.slice(0, 1)}</span>
         <div>
           <strong>{match.champion}</strong>
-          <span>{match.role} · {dateFormatter.format(new Date(match.playedAt))}</span>
+          <span>{roleLabel(match)} · {dateFormatter.format(new Date(match.playedAt))}</span>
         </div>
       </div>
       <div className={styles.kdaBlock}>
@@ -116,6 +120,17 @@ function MatchRow({ item }: { item: ScoredMatch }) {
       </div>
       <details className={styles.matchDetails}>
         <summary>评分明细</summary>
+        <div className={styles.roleBlend} aria-label="职业复合评分">
+          <span>职业评分</span>
+          {item.roleComponents.map((component) => (
+            <div key={component.role}>
+              <strong>{component.role}</strong>
+              <b>{component.score}</b>
+              <small>× {Math.round(component.weight * 100)}%</small>
+            </div>
+          ))}
+          {item.roleComponents.length === 2 && <em>融合后 {item.positiveScore}</em>}
+        </div>
         <div className={styles.dimensionGrid}>
           {item.dimensions.map((dimension) => (
             <div key={dimension.label}>
@@ -372,7 +387,7 @@ export default function HaiDouDashboard() {
         <section className={styles.flowDeck} aria-labelledby="flow-title">
           <div className={styles.flowHeader}>
             <div>
-              <span className={styles.flowKicker}>主流程 · V0.3</span>
+            <span className={styles.flowKicker}>主流程 · V0.4</span>
               <h1 id="flow-title">从玩家身份开始生成海斗战报</h1>
               <p>登录 LOL 后可直接读取当前玩家与最近战绩，也可以继续使用演示检索或导入自己的文件。</p>
             </div>
@@ -446,7 +461,7 @@ export default function HaiDouDashboard() {
                 </div>
                 <div className={styles.schemaNote}>
                   <span>格式要求</span>
-                  <p>职业仅接受辅助、法师、刺客、坦克、射手、战士。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
+                  <p>主、副职业仅接受辅助、法师、刺客、坦克、射手、战士，副职业可留空。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
                 </div>
               </div>
             ) : (
@@ -562,7 +577,7 @@ export default function HaiDouDashboard() {
               {summary.highlights.map((item, index) => (
                 <article key={item.match.id}>
                   <span>0{index + 1}</span>
-                  <div><strong>{item.match.champion}</strong><small>{item.match.role} · {item.match.kills}/{item.match.deaths}/{item.match.assists}</small></div>
+                  <div><strong>{item.match.champion}</strong><small>{roleLabel(item.match)} · {item.match.kills}/{item.match.deaths}/{item.match.assists}</small></div>
                   <p>{item.dimensions.sort((a, b) => b.score - a.score)[0]?.label} {Math.max(...item.dimensions.map((dimension) => dimension.score))} 分</p>
                   <b>{item.score}</b>
                 </article>
@@ -592,7 +607,7 @@ export default function HaiDouDashboard() {
           <div className={styles.matchesHeader}>
             <div className={styles.sectionHeading}>
               <div><span>比赛时间带</span><h2 id="matches-title">近期对局</h2></div>
-              <small>伤害、控制、治疗与生存共同评分</small>
+              <small>主职业 60% + 副职业 40%，死亡规则仅计算一次</small>
             </div>
             <div className={styles.segmented} aria-label="筛选近期对局">
               {(["全部", "胜利", "失败"] as MatchFilter[]).map((option) => (
@@ -607,7 +622,7 @@ export default function HaiDouDashboard() {
 
         <aside className={styles.methodNote}>
           <span>评分说明</span>
-          <p>当前 MVP 使用固定职业基线验证产品体验。正式数据源接入后，将切换为同版本、同模式、同英雄的样本百分位。历史“作弊：我能回城！”对局会提高回城后的死亡权重。</p>
+          <p>当前 MVP 使用固定职业基线验证产品体验。双职业英雄分别计算主副职业正向分，再按 60% / 40% 融合；死亡与“作弊：我能回城！”规则只在融合后应用一次。正式数据源接入后，将切换为同版本、同模式、同英雄的样本百分位。</p>
         </aside>
       </main>
 

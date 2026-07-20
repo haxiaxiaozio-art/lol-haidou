@@ -68,20 +68,37 @@ const ROLE_DIMENSIONS: Record<Role, DimensionDefinition[]> = {
 };
 
 export function scoreMatch(match: MatchRecord): ScoredMatch {
-  const definitions = ROLE_DIMENSIONS[match.role];
-  const dimensions: DimensionScore[] = definitions.map((definition) => {
-    const value = definition.value(match);
-    return {
-      label: definition.label,
-      score: Math.round(metricScore(value, definition.expected)),
-      displayValue: definition.format(value),
-    };
-  });
+  const scoreRole = (role: Role) => {
+    const definitions = ROLE_DIMENSIONS[role];
+    const dimensions: DimensionScore[] = definitions.map((definition) => {
+      const value = definition.value(match);
+      return {
+        label: definition.label,
+        score: Math.round(metricScore(value, definition.expected)),
+        displayValue: definition.format(value),
+      };
+    });
+    const score = dimensions.reduce(
+      (total, dimension, index) => total + dimension.score * definitions[index].weight,
+      0,
+    );
+    return { dimensions, score };
+  };
 
-  const positiveScore = dimensions.reduce(
-    (total, dimension, index) => total + dimension.score * definitions[index].weight,
-    0,
-  );
+  const primary = scoreRole(match.role);
+  const secondaryRole = match.secondaryRole === match.role ? undefined : match.secondaryRole;
+  const secondary = secondaryRole ? scoreRole(secondaryRole) : null;
+  const roleComponents = secondary && secondaryRole
+    ? [
+        { role: match.role, weight: 0.6, score: Math.round(primary.score) },
+        { role: secondaryRole, weight: 0.4, score: Math.round(secondary.score) },
+      ]
+    : [{ role: match.role, weight: 1, score: Math.round(primary.score) }];
+  const positiveScore = secondary
+    ? primary.score * 0.6 + secondary.score * 0.4
+    : primary.score;
+
+  const dimensions: DimensionScore[] = primary.dimensions;
 
   const effectiveDeaths = match.recall
     ? match.recall.deathsBefore + match.recall.deathsAfter * 2.5
@@ -105,6 +122,7 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
     survivalScore: Math.round(survivalScore),
     recallApplied: Boolean(match.recall),
     dimensions,
+    roleComponents,
   };
 }
 

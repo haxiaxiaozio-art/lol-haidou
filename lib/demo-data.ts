@@ -3,6 +3,7 @@ import type { MatchMetrics, MatchRecord, PlayerDataset, Role } from "./types";
 type Seed = {
   champion: string;
   role: Role;
+  secondaryRole?: Role;
   base: Omit<MatchMetrics, "gold"> & { gold: number };
   kills: number;
   deaths: number;
@@ -14,6 +15,7 @@ const seeds: Seed[] = [
   {
     champion: "萨勒芬妮",
     role: "辅助",
+    secondaryRole: "法师",
     base: { damage: 27740, controlSeconds: 67, healing: 10820, shielding: 15840, mitigated: 9720, damageTaken: 21800, selfHealing: 1440, gold: 12860 },
     kills: 5,
     deaths: 4,
@@ -32,6 +34,7 @@ const seeds: Seed[] = [
   {
     champion: "阿卡丽",
     role: "刺客",
+    secondaryRole: "法师",
     base: { damage: 32540, controlSeconds: 9, healing: 0, shielding: 2780, mitigated: 8750, damageTaken: 25500, selfHealing: 4870, gold: 14940 },
     kills: 16,
     deaths: 8,
@@ -41,6 +44,7 @@ const seeds: Seed[] = [
   {
     champion: "奥恩",
     role: "坦克",
+    secondaryRole: "战士",
     base: { damage: 19870, controlSeconds: 78, healing: 0, shielding: 5960, mitigated: 39200, damageTaken: 54800, selfHealing: 5630, gold: 13210 },
     kills: 4,
     deaths: 7,
@@ -59,6 +63,7 @@ const seeds: Seed[] = [
   {
     champion: "亚托克斯",
     role: "战士",
+    secondaryRole: "坦克",
     base: { damage: 33780, controlSeconds: 32, healing: 0, shielding: 3280, mitigated: 24400, damageTaken: 39800, selfHealing: 11860, gold: 15110 },
     kills: 13,
     deaths: 8,
@@ -95,6 +100,7 @@ const matches: MatchRecord[] = seeds.flatMap((seed, seedIndex) =>
       patch: sequence < 13 ? "26.14" : "26.13",
       champion: seed.champion,
       role: seed.role,
+      secondaryRole: seed.secondaryRole,
       win,
       durationMinutes,
       kills: isPeak ? 9 : Math.max(1, Math.round(seed.kills * factor + (win ? 1 : -1))),
@@ -116,6 +122,7 @@ matches.push({
   patch: "26.10",
   champion: "奥恩",
   role: "坦克",
+  secondaryRole: "战士",
   win: true,
   durationMinutes: 22.8,
   kills: 3,

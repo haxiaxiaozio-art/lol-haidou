@@ -72,25 +72,30 @@ function augmentIds(participant) {
     .map(String))];
 }
 
-function roleForChampion(champion, participant) {
-  const classifyFirst = (candidates) => {
+function rolesForChampion(champion, participant) {
+  const classify = (candidates) => {
+    const roles = [];
     for (const value of candidates) {
       if (!value) continue;
       const candidate = String(value).toLowerCase();
       const selected = ROLE_KEYS.find((role) => candidate.includes(role));
-      if (selected) return ROLE_MAP[selected];
+      const mapped = selected ? ROLE_MAP[selected] : null;
+      if (mapped && !roles.includes(mapped)) roles.push(mapped);
     }
-    return null;
+    return roles;
   };
 
-  const championRole = classifyFirst(Array.isArray(champion?.roles) ? champion.roles : []);
-  if (championRole) return championRole;
+  const championRoles = classify(Array.isArray(champion?.roles) ? champion.roles : []);
+  if (championRoles.length) {
+    return { role: championRoles[0], secondaryRole: championRoles[1] };
+  }
 
-  return classifyFirst([
+  const positionRole = classify([
     participant?.teamPosition,
     participant?.individualPosition,
     participant?.timeline?.role,
-  ]) ?? "战士";
+  ])[0] ?? "战士";
+  return { role: positionRole };
 }
 
 function augmentLabel(id, augmentNames) {
@@ -130,13 +135,14 @@ export function normalizeMatch(game, context) {
   const championName = firstValue(participant?.championName, champion?.name, champion?.alias, championId ? `英雄 ${championId}` : "未知英雄");
   const gameVersion = String(firstValue(game?.gameVersion, game?.version, "未知版本"));
   const patchParts = gameVersion.split(".");
+  const roles = rolesForChampion(champion, participant);
 
   return {
     id: String(firstValue(game?.gameId, game?.id, `${Date.now()}-${championId}`)),
     playedAt: gameTime(game),
     patch: patchParts.length >= 2 ? `${patchParts[0]}.${patchParts[1]}` : gameVersion,
     champion: String(championName),
-    role: roleForChampion(champion, participant),
+    ...roles,
     win: Boolean(firstValue(stats?.win, participant?.win, false)),
     durationMinutes: durationMinutes(game, stats),
     kills: numberValue(stats?.kills),

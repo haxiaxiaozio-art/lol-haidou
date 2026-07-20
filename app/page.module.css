@@ -178,6 +178,12 @@
 .matchScore span { color: var(--text-3); font-size: 11px; }
 .matchDetails { grid-column: 1 / -1; margin: -4px 0 0 55px; }
 .matchDetails summary { width: fit-content; min-height: 40px; display: flex; align-items: center; color: var(--accent-strong); cursor: pointer; font-size: 12px; }
+.roleBlend { min-height: 50px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 1px; background: var(--surface-2); font-variant-numeric: tabular-nums; }
+.roleBlend > span { margin-right: 4px; color: var(--text-3); font-size: 11px; }
+.roleBlend > div { display: inline-grid; grid-template-columns: auto auto auto; align-items: baseline; gap: 7px; padding: 6px 9px; border-radius: var(--radius-s); background: var(--surface-1); }
+.roleBlend b { color: var(--accent-strong); font-size: 18px; }
+.roleBlend small { color: var(--text-3); font-size: 11px; }
+.roleBlend em { margin-left: auto; color: var(--text-2); font-size: 12px; font-style: normal; }
 .dimensionGrid { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface-2); }
 .dimensionGrid > div { display: grid; padding: 12px 14px; border-right: 1px solid var(--line); }
 .dimensionGrid > div:last-child { border-right: 0; }
@@ -282,6 +288,9 @@
   .segmented button { flex: 1; }
   .matchRow { padding-right: 8px; }
   .matchDetails { margin-left: 0; }
+  .roleBlend { align-items: flex-start; flex-wrap: wrap; }
+  .roleBlend > span { width: 100%; }
+  .roleBlend em { width: 100%; margin-left: 0; }
   .dimensionGrid { grid-template-columns: 1fr; }
   .dimensionGrid > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .dimensionGrid > div:last-child { border-bottom: 0; }

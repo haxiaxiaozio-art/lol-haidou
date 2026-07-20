@@ -25,6 +25,7 @@ export type MatchRecord = {
   patch: string;
   champion: string;
   role: Role;
+  secondaryRole?: Role;
   win: boolean;
   durationMinutes: number;
   kills: number;
@@ -68,6 +69,7 @@ export type ScoredMatch = {
   survivalScore: number;
   recallApplied: boolean;
   dimensions: DimensionScore[];
+  roleComponents: Array<{ role: Role; weight: number; score: number }>;
 };
 
 export type PlayerSummary = {
