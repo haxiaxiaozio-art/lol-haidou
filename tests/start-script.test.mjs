@@ -7,25 +7,28 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 const execFileAsync = promisify(execFile);
-const scripts = ["启动网站.cmd", "start-site.cmd"];
+test("website launcher opens the public site and avoids dev-server ports", async () => {
+  const content = await readFile(new URL("../start-site.cmd", import.meta.url), "utf8");
+  assert.doesNotMatch(content, /[^\x00-\x7F]/, "batch contents must remain ASCII-only");
+  assert.match(content, /where node/);
+  assert.match(content, /127\.0\.0\.1:3211\/v1\/health/);
+  assert.match(content, /haxiaxiaozio-art\.github\.io\/lol-haidou/);
+  assert.match(content, /start-helper\.cmd/);
+  assert.doesNotMatch(content, /npm run dev|:3000/);
+});
 
-for (const script of scripts) {
-  test(`${script} stays safe for Windows cmd.exe`, async () => {
-    const content = await readFile(new URL(`../${script}`, import.meta.url), "utf8");
-    assert.doesNotMatch(content, /[^\x00-\x7F]/, "batch contents must remain ASCII-only");
-    assert.match(content, /where node/);
-    assert.match(content, /call npm install/);
-    assert.match(content, /call npm run dev/);
-    assert.match(content, /helper\/server\.mjs/);
-    assert.doesNotMatch(content, /^chcp /m, "changing code pages inside a batch file is fragile");
-  });
-}
+test("Chinese website launcher delegates to the maintained launcher", async () => {
+  const content = await readFile(new URL("../启动网站.cmd", import.meta.url), "utf8");
+  assert.doesNotMatch(content, /[^\x00-\x7F]/);
+  assert.match(content, /call "%~dp0start-site\.cmd"/);
+});
 
 test("launcher parses and reaches the start branch in cmd.exe", { skip: process.platform !== "win32" }, async () => {
   const content = await readFile(new URL("../start-site.cmd", import.meta.url), "utf8");
   const fixture = content
-    .replace(/^powershell\.exe .*helper\/server\.mjs.*$/m, "rem helper disabled in launcher fixture")
-    .replace("call npm run dev", "echo HAIDOU_LAUNCHER_OK")
+    .replace(/^powershell\.exe .*$/m, "cmd.exe /d /c exit 1")
+    .replace(/^  start "HaiDou Data Helper" .*$/m, "  echo HAIDOU_HELPER_START")
+    .replace(/^start "" "%HAIDOU_SITE%"$/m, "echo HAIDOU_LAUNCHER_OK")
     .replaceAll("pause", "rem pause");
   const directory = await mkdtemp(join(tmpdir(), "haidou-launcher-"));
   try {
@@ -40,11 +43,17 @@ test("launcher parses and reaches the start branch in cmd.exe", { skip: process.
   }
 });
 
-for (const script of ["启动数据助手.cmd", "start-helper.cmd"]) {
-  test(`${script} starts only the loopback helper`, async () => {
-    const content = await readFile(new URL(`../${script}`, import.meta.url), "utf8");
-    assert.doesNotMatch(content, /[^\x00-\x7F]/);
-    assert.match(content, /where node/);
-    assert.match(content, /node helper\\server\.mjs/);
-  });
-}
+test("helper launcher reports existing service and starts only the loopback helper", async () => {
+  const content = await readFile(new URL("../start-helper.cmd", import.meta.url), "utf8");
+  assert.doesNotMatch(content, /[^\x00-\x7F]/);
+  assert.match(content, /where node/);
+  assert.match(content, /127\.0\.0\.1:3211\/v1\/health/);
+  assert.match(content, /already running/);
+  assert.match(content, /node helper\\server\.mjs/);
+});
+
+test("Chinese helper launcher delegates to the maintained launcher", async () => {
+  const content = await readFile(new URL("../启动数据助手.cmd", import.meta.url), "utf8");
+  assert.doesNotMatch(content, /[^\x00-\x7F]/);
+  assert.match(content, /call "%~dp0start-helper\.cmd"/);
+});

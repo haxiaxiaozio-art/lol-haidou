@@ -1,29 +1,34 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "HAIDOU_SITE=https://haxiaxiaozio-art.github.io/lol-haidou/"
+
 where node >nul 2>nul
 if errorlevel 1 goto missing_node
-if not exist node_modules goto install_dependencies
-goto start_site
 
-:install_dependencies
-echo First launch: installing website dependencies. Please wait...
-call npm install
-if errorlevel 1 goto install_failed
+call :helper_ready
+if errorlevel 1 (
+  echo Starting the HaiDou local data helper...
+  start "HaiDou Data Helper" /min cmd.exe /d /k call "%CD%\start-helper.cmd"
+) else (
+  echo HaiDou local data helper is already running.
+)
 
-:start_site
-echo Starting HaiDou MVP. Open the Local address shown below in your browser.
-powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath 'node.exe' -ArgumentList 'helper/server.mjs' -WorkingDirectory '%CD%'"
-call npm run dev
+echo Opening the public HaiDou website...
+start "" "%HAIDOU_SITE%"
+echo.
+echo Keep the data helper window running while reading LOL match history.
+echo The website will show whether the helper, LOL client, and player login are connected.
 pause
+exit /b 0
+
+:helper_ready
+powershell.exe -NoProfile -NonInteractive -Command "try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:3211/v1/health' -TimeoutSec 1; if ($response.StatusCode -eq 200) { exit 0 }; exit 1 } catch { exit 1 }"
 exit /b %errorlevel%
 
 :missing_node
 echo Node.js was not found. Install Node.js 22 or newer, then try again.
-pause
-exit /b 1
-
-:install_failed
-echo Dependency installation failed. Check your network, then try again.
+echo You can still open the demo website at %HAIDOU_SITE%
+start "" "%HAIDOU_SITE%"
 pause
 exit /b 1

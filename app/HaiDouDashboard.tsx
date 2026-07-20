@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
-import { detectCurrentPlayer, syncLocalHistory } from "../lib/local-client";
+import { probeLocalConnection, syncLocalHistory, type LocalConnectionProbe } from "../lib/local-client";
 import { summarizePlayer } from "../lib/scoring";
 import type { LocalClientPlayer, MatchRecord, PlayerDataset, ScoredMatch } from "../lib/types";
 import styles from "./page.module.css";
@@ -23,6 +23,19 @@ const FLOW_STATUS_COPY: Record<FlowStatus, string> = {
 };
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+const INITIAL_CONNECTION: LocalConnectionProbe = {
+  status: "checking",
+  message: "正在检测本地数据助手",
+  player: null,
+};
+
+const CONNECTION_LABEL: Record<LocalConnectionProbe["status"], string> = {
+  checking: "正在检测助手",
+  "helper-offline": "数据助手未启动",
+  "client-offline": "等待 LOL 登录",
+  connected: "玩家已连接",
+};
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit",
@@ -132,11 +145,28 @@ export default function HaiDouDashboard() {
   const [flowDetail, setFlowDetail] = useState("当前能力：演示数据与本地文件");
   const [lookupError, setLookupError] = useState("");
   const [localPlayer, setLocalPlayer] = useState<LocalClientPlayer | null>(null);
+  const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
   const [importMessage, setImportMessage] = useState("尚未导入文件，当前展示完整演示数据。");
   const [importError, setImportError] = useState("");
   const summary = useMemo(() => summarizePlayer(dataset), [dataset]);
   const isFlowBusy = ["resolving", "syncing", "scoring"].includes(flowStatus);
   const activeStep = flowStatus === "ready" ? 3 : flowStatus === "connected" || isFlowBusy ? 2 : 1;
+
+  useEffect(() => {
+    let active = true;
+    const refreshConnection = async () => {
+      const connection = await probeLocalConnection();
+      if (!active) return;
+      setLocalConnection(connection);
+      setLocalPlayer(connection.player);
+    };
+    void refreshConnection();
+    const timer = window.setInterval(() => void refreshConnection(), 8_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const toggleTheme = () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -179,13 +209,18 @@ export default function HaiDouDashboard() {
 
   const changeSource = (nextSource: SourceMode) => {
     setSourceMode(nextSource);
+    if (nextSource === "local" && localPlayer) {
+      setGameName(localPlayer.gameName);
+      setTagLine(localPlayer.tag);
+      setRegion(localPlayer.region);
+    }
     setFlowStatus("idle");
     setFlowDetail(
       nextSource === "demo"
         ? "演示数据最多提供 31 场流程样本"
         : nextSource === "file"
           ? "文件导入不限制到固定档位"
-          : "先启动并登录 LOL，再检测当前玩家",
+          : localConnection.message,
     );
     setLookupError("");
     setImportError("");
@@ -195,20 +230,22 @@ export default function HaiDouDashboard() {
     setLookupError("");
     setFlowStatus("resolving");
     setFlowDetail("正在通过本机数据助手查找 League 客户端");
-    try {
-      const player = await detectCurrentPlayer();
+    const connection = await probeLocalConnection();
+    setLocalConnection(connection);
+    setLocalPlayer(connection.player);
+    if (connection.player) {
+      const player = connection.player;
       setLocalPlayer(player);
       setGameName(player.gameName);
       setTagLine(player.tag);
       setRegion(player.region);
       setFlowStatus("connected");
       setFlowDetail(`已识别 ${player.gameName}#${player.tag} · ${player.region}`);
-    } catch (error) {
-      setLocalPlayer(null);
-      setFlowStatus("idle");
-      setFlowDetail("客户端尚未连接，演示数据仍可正常使用");
-      setLookupError(error instanceof Error ? error.message : "无法连接 LOL 客户端");
+      return;
     }
+    setFlowStatus("idle");
+    setFlowDetail(connection.status === "helper-offline" ? "本地数据助手尚未启动" : "数据助手在线，等待 LOL 客户端登录");
+    setLookupError(connection.message);
   };
 
   const runLocalSync = async () => {
@@ -320,7 +357,9 @@ export default function HaiDouDashboard() {
           <span><strong>海斗战报</strong><small>本地数据实验室</small></span>
         </a>
         <div className={styles.headerActions}>
-          <span className={styles.localBadge}>MVP · LOCAL</span>
+          <span className={styles.localBadge} data-status={localConnection.status} title={localConnection.message}>
+            <i aria-hidden="true" />{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : CONNECTION_LABEL[localConnection.status]}
+          </span>
           <button className={styles.themeButton} type="button" onClick={toggleTheme} aria-label="切换白天或深夜模式">
             <span className={styles.themeDarkLabel} aria-hidden="true">☾ 深夜</span>
             <span className={styles.themeLightLabel} aria-hidden="true">☀ 白天</span>
@@ -411,12 +450,12 @@ export default function HaiDouDashboard() {
               </div>
             ) : (
               <div className={styles.localClientFlow}>
-                <div className={styles.clientStatus} data-connected={Boolean(localPlayer)}>
+                <div className={styles.clientStatus} data-status={localConnection.status}>
                   <span className={styles.clientStatusMark} aria-hidden="true" />
                   <div>
-                    <small>{localPlayer ? "已连接当前玩家" : "等待检测客户端"}</small>
-                    <strong>{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : "请先启动并登录 LOL"}</strong>
-                    <p>{localPlayer ? `${localPlayer.region} · 身份信息来自本机 League 客户端` : "网页不会要求或读取你的 LOL、WeGame 密码。"}</p>
+                    <small>{CONNECTION_LABEL[localConnection.status]}</small>
+                    <strong>{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : localConnection.status === "helper-offline" ? "请双击“启动数据助手.cmd”" : "请启动并登录 LOL"}</strong>
+                    <p>{localPlayer ? `${localPlayer.region} · 身份信息来自本机 League 客户端` : localConnection.message}</p>
                   </div>
                   <button type="button" onClick={connectLocalClient} disabled={isFlowBusy}>
                     {flowStatus === "resolving" ? "正在检测" : localPlayer ? "重新检测" : "检测登录客户端"}

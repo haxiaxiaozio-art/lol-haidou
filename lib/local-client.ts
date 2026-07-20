@@ -20,6 +20,13 @@ export class LocalClientError extends Error {
   }
 }
 
+export type LocalConnectionProbe = {
+  status: "checking" | "helper-offline" | "client-offline" | "connected";
+  message: string;
+  code?: string;
+  player: LocalClientPlayer | null;
+};
+
 async function parseResponse<T>(response: Response): Promise<T> {
   let body: { message?: string; error?: string } & Partial<T> = {};
   try {
@@ -72,6 +79,40 @@ async function helperRequest<T>(path: string, init: RequestInit = {}, retry = tr
 export async function detectCurrentPlayer(): Promise<LocalClientPlayer> {
   const body = await helperRequest<{ connected: true; player: LocalClientPlayer }>("/v1/client");
   return body.player;
+}
+
+export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
+  try {
+    const health = await fetch(`${HELPER_URL}/v1/health`, { cache: "no-store" });
+    if (!health.ok) throw new Error("helper health check failed");
+  } catch {
+    sessionToken = "";
+    return {
+      status: "helper-offline",
+      message: helperOfflineMessage(),
+      code: "HELPER_OFFLINE",
+      player: null,
+    };
+  }
+
+  try {
+    const player = await detectCurrentPlayer();
+    return {
+      status: "connected",
+      message: `已连接 ${player.gameName}#${player.tag} · ${player.region}`,
+      player,
+    };
+  } catch (error) {
+    const localError = error instanceof LocalClientError
+      ? error
+      : new LocalClientError("无法读取当前玩家登录信息");
+    return {
+      status: "client-offline",
+      message: localError.message,
+      code: localError.code,
+      player: null,
+    };
+  }
 }
 
 export async function syncLocalHistory(count: 20 | 40 | 100 | 200): Promise<LocalClientSyncResult> {

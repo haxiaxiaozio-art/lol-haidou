@@ -8,7 +8,11 @@
 .wordmark strong { font-size: 16px; letter-spacing: 0.02em; }
 .wordmark small { color: var(--text-3); font-size: 11px; margin-top: 4px; }
 .headerActions { display: flex; align-items: center; gap: 12px; }
-.localBadge { font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; color: var(--text-3); }
+.localBadge { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0.05em; color: var(--text-3); }
+.localBadge i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 3px var(--surface-3); }
+.localBadge[data-status="checking"] i { animation: statusPulse 900ms ease-in-out infinite alternate; }
+.localBadge[data-status="client-offline"] i { background: #d89b25; box-shadow: 0 0 0 3px color-mix(in oklch, #d89b25 18%, transparent); }
+.localBadge[data-status="connected"] i { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .themeButton { min-width: 88px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--surface-2); border: 0; border-radius: var(--radius-m); cursor: pointer; transition-property: transform, background-color; transition-duration: 150ms; }
 .themeButton:active { transform: scale(0.96); }
 .themeLightLabel { display: none; }
@@ -55,7 +59,9 @@
 .localClientFlow { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); gap: 26px; align-items: stretch; }
 .clientStatus { min-width: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); }
 .clientStatusMark { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 5px var(--surface-3); }
-.clientStatus[data-connected="true"] .clientStatusMark { background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
+.clientStatus[data-status="checking"] .clientStatusMark { animation: statusPulse 900ms ease-in-out infinite alternate; }
+.clientStatus[data-status="client-offline"] .clientStatusMark { background: #d89b25; box-shadow: 0 0 0 5px color-mix(in oklch, #d89b25 18%, transparent); }
+.clientStatus[data-status="connected"] .clientStatusMark { background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
 .clientStatus > div { min-width: 0; display: grid; }
 .clientStatus small { color: var(--text-3); }
 .clientStatus strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; }
