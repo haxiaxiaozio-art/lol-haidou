@@ -16,7 +16,8 @@ export class ClientUnavailableError extends Error {
   }
 }
 
-function parseCommandLine(commandLine = "") {
+export function parseCommandLine(commandLine) {
+  if (typeof commandLine !== "string" || commandLine.trim() === "") return null;
   const read = (name) => {
     const match = commandLine.match(new RegExp(`--${name}(?:=|\\s+)(?:\"([^\"]+)\"|'([^']+)'|([^\\s]+))`, "i"));
     return match?.[1] ?? match?.[2] ?? match?.[3];

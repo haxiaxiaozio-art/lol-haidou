@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createHaidouHelper } from "../helper/server.mjs";
+import { parseCommandLine } from "../helper/lcu.mjs";
+
+test("LCU command line parser tolerates protected process fields", async () => {
+  assert.equal(parseCommandLine(null), null);
+  assert.equal(parseCommandLine(undefined), null);
+  assert.equal(parseCommandLine(""), null);
+  assert.deepEqual(
+    parseCommandLine('--app-port=54321 --remoting-auth-token="secret" --app-protocol=https'),
+    { port: 54321, password: "secret", protocol: "https" },
+  );
+  const launcher = await readFile(new URL("../start-helper.cmd", import.meta.url), "utf8");
+  assert.match(launcher, /-Verb RunAs/);
+});
 
 test("local helper exposes health and protects private routes", async (context) => {
   const server = createHaidouHelper();
@@ -17,7 +31,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 2);
+  assert.equal(healthBody.version, 3);
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });
   assert.equal(blocked.status, 403);
