@@ -25,7 +25,13 @@ export function parseCommandLine(commandLine) {
   const port = Number(read("app-port"));
   const password = read("remoting-auth-token");
   if (!Number.isInteger(port) || !password) return null;
-  return { port, password, protocol: read("app-protocol") ?? "https" };
+  const platformId = read("rso_platform_id") ?? read("region");
+  return {
+    port,
+    password,
+    protocol: read("app-protocol") ?? "https",
+    ...(platformId ? { platformId } : {}),
+  };
 }
 
 function parseLockfile(content = "") {
@@ -176,13 +182,16 @@ function augmentMap(payload) {
 
 export async function getCurrentPlayer() {
   const credentials = await detectLeagueClient();
-  const [player, region] = await Promise.all([
+  const [player, apiRegion] = await Promise.all([
     lcuRequest(credentials, "/lol-summoner/v1/current-summoner"),
     optionalRequest(credentials, "/riotclient/region-locale", {}),
   ]);
   if (!player?.puuid && !player?.accountId && !player?.summonerId) {
     throw new ClientUnavailableError("LOL 客户端已启动，但当前玩家尚未登录");
   }
+  const region = credentials.platformId
+    ? { ...apiRegion, webRegion: credentials.platformId }
+    : apiRegion;
   return {
     credentials,
     player,

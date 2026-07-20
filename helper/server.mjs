@@ -98,7 +98,7 @@ export function createHaidouHelper() {
       return response.end();
     }
     if (request.method === "GET" && url.pathname === "/v1/health") {
-      return send(response, 200, { ok: true, service: "haidou-local-helper", version: 4 }, origin);
+      return send(response, 200, { ok: true, service: "haidou-local-helper", version: 5 }, origin);
     }
     if (!allowedOrigin(origin)) return send(response, 403, { error: "ORIGIN_NOT_ALLOWED", message: "该网站未获准连接本地数据助手" }, origin);
 
