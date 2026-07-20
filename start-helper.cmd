@@ -22,7 +22,7 @@ exit /b %errorlevel%
 
 :already_running
 echo HaiDou local data helper is already running at http://127.0.0.1:3212
-echo Open https://haxiaxiaozio-art.github.io/lol-haidou/ to check LOL login status.
+echo Open https://haxiaxiaozio-art.github.io/lol-haidou/?v=2 to check LOL login status.
 pause
 exit /b 0
 

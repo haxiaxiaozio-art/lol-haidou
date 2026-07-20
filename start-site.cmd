@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "HAIDOU_SITE=https://haxiaxiaozio-art.github.io/lol-haidou/"
+set "HAIDOU_SITE=https://haxiaxiaozio-art.github.io/lol-haidou/?v=2"
 
 where node >nul 2>nul
 if errorlevel 1 goto missing_node
