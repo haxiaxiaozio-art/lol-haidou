@@ -11,7 +11,7 @@ test("website launcher opens the public site and avoids dev-server ports", async
   const content = await readFile(new URL("../start-site.cmd", import.meta.url), "utf8");
   assert.doesNotMatch(content, /[^\x00-\x7F]/, "batch contents must remain ASCII-only");
   assert.match(content, /where node/);
-  assert.match(content, /127\.0\.0\.1:3211\/v1\/health/);
+  assert.match(content, /127\.0\.0\.1:3212\/v1\/health/);
   assert.match(content, /haxiaxiaozio-art\.github\.io\/lol-haidou/);
   assert.match(content, /start-helper\.cmd/);
   assert.doesNotMatch(content, /npm run dev|:3000/);
@@ -47,7 +47,7 @@ test("helper launcher reports existing service and starts only the loopback help
   const content = await readFile(new URL("../start-helper.cmd", import.meta.url), "utf8");
   assert.doesNotMatch(content, /[^\x00-\x7F]/);
   assert.match(content, /where node/);
-  assert.match(content, /127\.0\.0\.1:3211\/v1\/health/);
+  assert.match(content, /127\.0\.0\.1:3212\/v1\/health/);
   assert.match(content, /already running/);
   assert.match(content, /node helper\\server\.mjs/);
 });

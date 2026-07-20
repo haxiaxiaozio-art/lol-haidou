@@ -1,6 +1,6 @@
 import type { LocalClientPlayer, LocalClientSyncResult } from "./types";
 
-const HELPER_URL = "http://127.0.0.1:3211";
+const HELPER_URL = "http://127.0.0.1:3212";
 let sessionToken = "";
 
 function helperOfflineMessage() {
