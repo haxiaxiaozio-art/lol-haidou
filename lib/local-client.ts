@@ -121,3 +121,14 @@ export async function syncLocalHistory(count: 20 | 40 | 100 | 200): Promise<Loca
     body: JSON.stringify({ count }),
   });
 }
+
+export async function searchLocalHistory(
+  gameName: string,
+  tagLine: string,
+  count: 20 | 40 | 100 | 200,
+): Promise<LocalClientSyncResult> {
+  return helperRequest<LocalClientSyncResult>("/v1/search", {
+    method: "POST",
+    body: JSON.stringify({ gameName, tagLine, count }),
+  });
+}

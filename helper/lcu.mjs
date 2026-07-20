@@ -112,17 +112,25 @@ export async function detectLeagueClient() {
   return credentials;
 }
 
-function lcuRequest(credentials, requestPath) {
+function lcuRequest(credentials, requestPath, options = {}) {
+  const method = options.method ?? "GET";
+  const requestBody = options.body === undefined ? null : JSON.stringify(options.body);
   return new Promise((resolve, reject) => {
     const request = https.request({
       hostname: "127.0.0.1",
       port: credentials.port,
       path: requestPath,
-      method: "GET",
+      method,
       auth: `riot:${credentials.password}`,
       rejectUnauthorized: false,
       timeout: 10_000,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        ...(requestBody ? {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(requestBody),
+        } : {}),
+      },
     }, (response) => {
       const chunks = [];
       let size = 0;
@@ -149,6 +157,7 @@ function lcuRequest(credentials, requestPath) {
     });
     request.on("timeout", () => request.destroy(new Error("连接 LOL 客户端超时")));
     request.on("error", reject);
+    if (requestBody) request.write(requestBody);
     request.end();
   });
 }
@@ -264,6 +273,35 @@ export async function getCurrentPlayer() {
   };
 }
 
+export function normalizeSearchIdentity(gameName, tagLine) {
+  const normalizedName = String(gameName ?? "").trim();
+  const normalizedTag = String(tagLine ?? "").trim().replace(/^#/, "");
+  if (normalizedName.length < 2 || normalizedName.length > 32) {
+    throw new Error("游戏名需要 2 到 32 个字符");
+  }
+  if (normalizedTag.length < 2 || normalizedTag.length > 6) {
+    throw new Error("尾标需要 2 到 6 个字符，不用输入井号");
+  }
+  return { gameName: normalizedName, tagLine: normalizedTag };
+}
+
+async function getSummonerByAlias(credentials, gameName, tagLine) {
+  const identity = normalizeSearchIdentity(gameName, tagLine);
+  const aliases = await lcuRequest(credentials, "/lol-summoner/v1/summoners/aliases", {
+    method: "POST",
+    body: [identity],
+  });
+  const summoner = Array.isArray(aliases) ? aliases[0] : null;
+  if (!summoner?.puuid && !summoner?.accountId && !summoner?.summonerId) {
+    throw new Error(`未在当前大区找到 ${identity.gameName}#${identity.tagLine}`);
+  }
+  return {
+    ...summoner,
+    gameName: summoner.gameName ?? identity.gameName,
+    tagLine: summoner.tagLine ?? identity.tagLine,
+  };
+}
+
 async function recentHistoryGames(credentials, player, count) {
   const identifier = player.puuid ?? player.accountId ?? player.summonerId;
   if (!identifier) throw new ClientUnavailableError("无法识别当前玩家");
@@ -321,12 +359,14 @@ async function historyGames(credentials, player, count) {
     .slice(0, count);
 }
 
-export async function syncHistory(requestedCount) {
+function validatedMatchCount(requestedCount) {
   const allowedCounts = new Set([20, 40, 100, 200]);
   const count = Number(requestedCount);
   if (!allowedCounts.has(count)) throw new Error("场次只能选择 20、40、100 或 200");
+  return count;
+}
 
-  const { credentials, player, region } = await getCurrentPlayer();
+async function buildHistoryResult(credentials, player, region, count) {
   const [scanned, championPayload, augmentPayload] = await Promise.all([
     historyGames(credentials, player, count),
     optionalRequest(credentials, "/lol-game-data/assets/v1/champion-summary.json", []),
@@ -342,4 +382,17 @@ export async function syncHistory(requestedCount) {
     scannedCount: scanned.length,
     haidouCount: matches.length,
   };
+}
+
+export async function syncHistory(requestedCount) {
+  const count = validatedMatchCount(requestedCount);
+  const { credentials, player, region } = await getCurrentPlayer();
+  return buildHistoryResult(credentials, player, region, count);
+}
+
+export async function syncPlayerHistory(gameName, tagLine, requestedCount) {
+  const count = validatedMatchCount(requestedCount);
+  const { credentials, region } = await getCurrentPlayer();
+  const player = await getSummonerByAlias(credentials, gameName, tagLine);
+  return buildHistoryResult(credentials, player, region, count);
 }

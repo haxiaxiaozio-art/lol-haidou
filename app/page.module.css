@@ -33,7 +33,7 @@
 .flowSteps li span { position: relative; z-index: 1; width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 .flowSteps li[data-state="done"] span, .flowSteps li[data-state="current"] span { background: var(--accent); color: var(--canvas); }
 .flowSteps li[data-state="current"] strong { color: var(--text-1); }
-.sourceTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sourceTabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .sourceTabs button { min-height: 78px; display: grid; align-content: center; gap: 1px; padding: 14px 24px; border: 0; border-right: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; transition-property: transform, background-color; transition-duration: 150ms; }
 .sourceTabs button:last-child { border-right: 0; }
 .sourceTabs button span { font-weight: 680; }
@@ -56,6 +56,20 @@
 .fileFlow { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 38px; }
 .fileFlow h2 { margin: 0; font-size: 22px; }
 .fileFlow p { max-width: 68ch; margin: 5px 0 0; color: var(--text-2); }
+.searchPlayerFlow { display: grid; grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.3fr); gap: 26px; align-items: stretch; }
+.searchClientLine { min-width: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); align-items: center; gap: 14px 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); }
+.searchClientLine > div { min-width: 0; display: grid; }
+.searchClientLine small { color: var(--text-3); }
+.searchClientLine strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; }
+.searchClientLine p { margin: 3px 0 0; color: var(--text-2); font-size: 12px; }
+.searchClientLine button { grid-column: 2; width: fit-content; min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-2); color: var(--text-1); cursor: pointer; font-weight: 620; }
+.searchClientLine button:disabled { cursor: wait; opacity: 0.65; }
+.searchClientLine[data-status="checking"] .clientStatusMark { animation: statusPulse 900ms ease-in-out infinite alternate; }
+.searchClientLine[data-status="client-offline"] .clientStatusMark { background: #d89b25; box-shadow: 0 0 0 5px color-mix(in oklch, #d89b25 18%, transparent); }
+.searchClientLine[data-status="connected"] .clientStatusMark { background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
+.playerSearchForm { grid-template-columns: minmax(200px, 1.4fr) minmax(110px, 0.7fr) minmax(120px, 0.65fr) auto; align-content: center; }
+.searchScopeNote { grid-column: 1 / -1; margin: 0; color: var(--text-3); font-size: 11px; }
+.searchPlayerFlow .lookupError { grid-column: 1 / -1; }
 .localClientFlow { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); gap: 26px; align-items: stretch; }
 .clientStatus { min-width: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); }
 .clientStatusMark { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 5px var(--surface-3); }
@@ -199,7 +213,7 @@
 .footer a { min-height: 40px; display: inline-flex; align-items: center; text-decoration: none; }
 
 @media (hover: hover) {
-  .themeButton:hover, .importActions button:hover, .sourceTabs button:hover:not(:disabled), .clientStatus button:hover:not(:disabled) { background: var(--surface-3); }
+  .themeButton:hover, .importActions button:hover, .sourceTabs button:hover:not(:disabled), .clientStatus button:hover:not(:disabled), .searchClientLine button:hover:not(:disabled) { background: var(--surface-3); }
   .primaryButton:hover { background: var(--accent-strong); }
   .queryButton:hover:not(:disabled) { background: var(--accent-strong); }
   .matchRow:hover { background: color-mix(in oklch, var(--surface-1) 55%, var(--surface-2)); }
@@ -210,6 +224,8 @@
   .flowHeader { grid-template-columns: 1fr; gap: 28px; }
   .flowSteps { width: min(100%, 520px); min-width: 0; }
   .lookupForm { grid-template-columns: 1fr 1.4fr 0.8fr; }
+  .searchPlayerFlow { grid-template-columns: 1fr; }
+  .playerSearchForm { grid-template-columns: 1.4fr 0.8fr 0.8fr auto; }
   .localClientFlow { grid-template-columns: 1fr; }
   .queryButton { width: fit-content; }
   .profileBand { grid-template-columns: minmax(0, 1fr) 230px; }
@@ -231,6 +247,7 @@
   .sourceTabs button[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
   .flowBody { padding: 26px 28px; }
   .lookupForm { grid-template-columns: 1fr 1fr; }
+  .playerSearchForm { grid-template-columns: 1fr 1fr; }
   .fileFlow { grid-template-columns: 1fr; gap: 20px; }
   .clientStatus { grid-template-columns: 12px minmax(0, 1fr); }
   .clientStatus button { grid-column: 2; width: fit-content; }
@@ -266,6 +283,7 @@
   .sourceTabs button { padding-inline: 20px; }
   .flowBody { padding: 24px 20px; }
   .lookupForm { grid-template-columns: 1fr; }
+  .playerSearchForm { grid-template-columns: 1fr; }
   .clientStatus { padding: 16px; }
   .syncControls { grid-template-columns: 1fr; padding: 16px; }
   .syncControls p { grid-column: 1; }

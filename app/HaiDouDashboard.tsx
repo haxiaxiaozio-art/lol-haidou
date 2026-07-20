@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
-import { probeLocalConnection, syncLocalHistory, type LocalConnectionProbe } from "../lib/local-client";
+import { probeLocalConnection, searchLocalHistory, syncLocalHistory, type LocalConnectionProbe } from "../lib/local-client";
 import { summarizePlayer } from "../lib/scoring";
 import type { LocalClientPlayer, MatchRecord, PlayerDataset, ScoredMatch } from "../lib/types";
 import styles from "./page.module.css";
 
 type MatchFilter = "全部" | "胜利" | "失败";
-type SourceMode = "demo" | "file" | "local";
+type SourceMode = "demo" | "file" | "search" | "local";
 type FlowStatus = "idle" | "resolving" | "connected" | "syncing" | "scoring" | "ready";
 
 const REGIONS = ["艾欧尼亚", "黑色玫瑰", "峡谷之巅", "联盟一区", "联盟二区", "联盟三区", "联盟四区", "联盟五区"];
@@ -156,9 +156,11 @@ export default function HaiDouDashboard() {
   const [region, setRegion] = useState(DEMO_DATASET.player.region);
   const [gameName, setGameName] = useState(DEMO_DATASET.player.gameName);
   const [tagLine, setTagLine] = useState(DEMO_DATASET.player.tag);
+  const [searchGameName, setSearchGameName] = useState("");
+  const [searchTagLine, setSearchTagLine] = useState("");
   const [matchCount, setMatchCount] = useState(20);
   const [flowStatus, setFlowStatus] = useState<FlowStatus>("idle");
-  const [flowDetail, setFlowDetail] = useState("当前能力：演示数据与本地文件");
+  const [flowDetail, setFlowDetail] = useState("当前能力：演示、文件、我的战绩与同区玩家检索");
   const [lookupError, setLookupError] = useState("");
   const [localPlayer, setLocalPlayer] = useState<LocalClientPlayer | null>(null);
   const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
@@ -236,7 +238,11 @@ export default function HaiDouDashboard() {
         ? "演示数据最多提供 31 场流程样本"
         : nextSource === "file"
           ? "文件导入不限制到固定档位"
-          : localConnection.message,
+          : nextSource === "search"
+            ? localPlayer
+              ? `可以检索 ${localPlayer.region} 的玩家战绩`
+              : "检索其他玩家前需要登录 LOL 客户端"
+            : localConnection.message,
     );
     setLookupError("");
     setImportError("");
@@ -286,6 +292,50 @@ export default function HaiDouDashboard() {
       setFlowStatus(localPlayer ? "connected" : "idle");
       setFlowDetail("读取未完成，页面保留上一次可用战报");
       setLookupError(error instanceof Error ? error.message : "读取 LOL 战绩失败");
+    }
+  };
+
+  const runPlayerSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedName = searchGameName.trim();
+    const normalizedTag = searchTagLine.trim().replace(/^#/, "");
+    if (!localPlayer) {
+      setLookupError("请先启动数据助手，并登录 LOL 客户端。");
+      return;
+    }
+    if (normalizedName.length < 2 || normalizedName.length > 32) {
+      setLookupError("游戏名需要 2 到 32 个字符。");
+      return;
+    }
+    if (normalizedTag.length < 2 || normalizedTag.length > 6) {
+      setLookupError("尾标需要 2 到 6 个字符，不用输入井号。");
+      return;
+    }
+
+    setLookupError("");
+    setFlowStatus("resolving");
+    setFlowDetail(`正在 ${localPlayer.region} 查找 ${normalizedName}#${normalizedTag}`);
+    try {
+      await wait(120);
+      setFlowStatus("syncing");
+      setFlowDetail(`已提交玩家检索，正在读取最近 ${matchCount} 场战绩`);
+      const result = await searchLocalHistory(
+        normalizedName,
+        normalizedTag,
+        matchCount as 20 | 40 | 100 | 200,
+      );
+      setFlowStatus("scoring");
+      setFlowDetail(`已找到 ${result.haidouCount} 场海斗对局，正在计算评分`);
+      await wait(160);
+      setDataset(result.dataset);
+      setFilter("全部");
+      setFlowStatus("ready");
+      setFlowDetail(`读取 ${result.scannedCount} 场战绩，筛选并导入 ${result.haidouCount} 场海斗对局`);
+      scrollToReport();
+    } catch (error) {
+      setFlowStatus("idle");
+      setFlowDetail("检索未完成，页面保留上一份可用战报");
+      setLookupError(error instanceof Error ? error.message : "无法检索该玩家");
     }
   };
 
@@ -389,7 +439,7 @@ export default function HaiDouDashboard() {
             <div>
             <span className={styles.flowKicker}>主流程 · V0.5</span>
               <h1 id="flow-title">从玩家身份开始生成海斗战报</h1>
-              <p>登录 LOL 后可直接读取当前玩家与最近战绩，也可以继续使用演示检索或导入自己的文件。</p>
+              <p>登录 LOL 后可读取自己的战绩，也可按 Riot ID 检索同区玩家；演示数据与文件导入继续保留。</p>
             </div>
             <ol className={styles.flowSteps} aria-label="生成战报进度">
               {["选择来源", "准备数据", "查看战报"].map((step, index) => {
@@ -407,8 +457,11 @@ export default function HaiDouDashboard() {
             <button type="button" role="tab" aria-selected={sourceMode === "file"} onClick={() => changeSource("file")}>
               <span>CSV / JSON</span><small>数据只在当前页面处理</small>
             </button>
+            <button type="button" role="tab" aria-selected={sourceMode === "search"} onClick={() => changeSource("search")}>
+              <span>检索玩家</span><small>查询当前客户端所在大区</small>
+            </button>
             <button type="button" role="tab" aria-selected={sourceMode === "local"} onClick={() => changeSource("local")}>
-              <span>本地 LOL 客户端</span><small>读取已登录玩家，不需要密码</small>
+              <span>我的战绩</span><small>读取当前登录玩家，不需要密码</small>
             </button>
           </div>
 
@@ -463,6 +516,44 @@ export default function HaiDouDashboard() {
                   <span>格式要求</span>
                   <p>主、副职业仅接受辅助、法师、刺客、坦克、射手、战士，副职业可留空。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
                 </div>
+              </div>
+            ) : sourceMode === "search" ? (
+              <div className={styles.searchPlayerFlow}>
+                <div className={styles.searchClientLine} data-status={localConnection.status}>
+                  <span className={styles.clientStatusMark} aria-hidden="true" />
+                  <div>
+                    <small>检索凭据</small>
+                    <strong>{localPlayer ? `${localPlayer.region} 已就绪` : "需要登录 LOL 客户端"}</strong>
+                    <p>{localPlayer ? `通过 ${localPlayer.gameName}#${localPlayer.tag} 的本机会话查询同区玩家` : localConnection.message}</p>
+                  </div>
+                  <button type="button" onClick={connectLocalClient} disabled={isFlowBusy}>
+                    {flowStatus === "resolving" ? "正在检测" : localPlayer ? "重新检测" : "检测登录客户端"}
+                  </button>
+                </div>
+                <form className={`${styles.lookupForm} ${styles.playerSearchForm}`} onSubmit={runPlayerSearch} noValidate>
+                  <label className={styles.nameField}>
+                    <span>游戏名</span>
+                    <input value={searchGameName} onChange={(event) => setSearchGameName(event.target.value)} placeholder="输入准确游戏名" disabled={isFlowBusy} autoComplete="off" />
+                  </label>
+                  <label>
+                    <span>尾标</span>
+                    <span className={styles.tagInput}><b>#</b><input value={searchTagLine} onChange={(event) => setSearchTagLine(event.target.value)} placeholder="例如 0927" disabled={isFlowBusy} autoComplete="off" /></span>
+                  </label>
+                  <label>
+                    <span>最近场次</span>
+                    <select value={matchCount} onChange={(event) => setMatchCount(Number(event.target.value))} disabled={isFlowBusy}>
+                      <option value={20}>20 场</option>
+                      <option value={40}>40 场</option>
+                      <option value={100}>100 场</option>
+                      <option value={200}>200 场</option>
+                    </select>
+                  </label>
+                  <button className={styles.queryButton} type="submit" disabled={!localPlayer || isFlowBusy}>
+                    {flowStatus === "resolving" ? "正在查找" : flowStatus === "syncing" || flowStatus === "scoring" ? "正在导入" : "检索并生成战报"}
+                  </button>
+                  <p className={styles.searchScopeNote}>当前版本只检索已登录客户端所在大区，输入完整的游戏名和尾标可避免同名误判。</p>
+                  {lookupError && <p className={styles.lookupError} role="alert">{lookupError}</p>}
+                </form>
               </div>
             ) : (
               <div className={styles.localClientFlow}>

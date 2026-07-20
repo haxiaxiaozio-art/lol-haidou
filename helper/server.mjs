@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ClientUnavailableError, getCurrentPlayer, syncHistory } from "./lcu.mjs";
+import { ClientUnavailableError, getCurrentPlayer, syncHistory, syncPlayerHistory } from "./lcu.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = 3212;
@@ -98,7 +98,7 @@ export function createHaidouHelper() {
       return response.end();
     }
     if (request.method === "GET" && url.pathname === "/v1/health") {
-      return send(response, 200, { ok: true, service: "haidou-local-helper", version: 8 }, origin);
+      return send(response, 200, { ok: true, service: "haidou-local-helper", version: 9 }, origin);
     }
     if (!allowedOrigin(origin)) return send(response, 403, { error: "ORIGIN_NOT_ALLOWED", message: "该网站未获准连接本地数据助手" }, origin);
 
@@ -119,6 +119,10 @@ export function createHaidouHelper() {
       if (request.method === "POST" && url.pathname === "/v1/sync") {
         const body = await readBody(request);
         return send(response, 200, await syncHistory(body.count), origin);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/search") {
+        const body = await readBody(request);
+        return send(response, 200, await syncPlayerHistory(body.gameName, body.tagLine, body.count), origin);
       }
       return send(response, 404, { error: "NOT_FOUND" }, origin);
     } catch (error) {
