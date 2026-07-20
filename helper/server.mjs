@@ -2,22 +2,35 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isSea } from "node:sea";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ClientUnavailableError, getCurrentPlayer, syncHistory, syncPlayerHistory } from "./lcu.mjs";
 
 const HOST = "127.0.0.1";
-const PORT = 3212;
+const DEFAULT_PORT = 3212;
+const configuredPort = Number(process.env.HAIDOU_PORT ?? DEFAULT_PORT);
+const PORT = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
+  ? configuredPort
+  : DEFAULT_PORT;
+const HELPER_VERSION = 10;
 const sessions = new Map();
 const SESSION_TTL = 15 * 60 * 1000;
-const helperDirectory = dirname(fileURLToPath(import.meta.url));
+const helperDirectory = isSea() ? dirname(process.execPath) : dirname(fileURLToPath(import.meta.url));
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://haxiaxiaozio-art.github.io",
+  "https://lol-haidou.haxiaxiaozio.chatgpt.site",
+];
 
 function configuredOrigins() {
-  const origins = new Set(
+  const origins = new Set([
+    ...DEFAULT_ALLOWED_ORIGINS,
+    ...(
     String(process.env.HAIDOU_ALLOWED_ORIGINS ?? "")
       .split(",")
       .map((origin) => origin.trim())
-      .filter(Boolean),
-  );
+      .filter(Boolean)
+    ),
+  ]);
   try {
     const fileOrigins = JSON.parse(readFileSync(join(helperDirectory, "allowed-origins.json"), "utf8"));
     for (const origin of Array.isArray(fileOrigins) ? fileOrigins : []) origins.add(String(origin));
@@ -98,7 +111,12 @@ export function createHaidouHelper() {
       return response.end();
     }
     if (request.method === "GET" && url.pathname === "/v1/health") {
-      return send(response, 200, { ok: true, service: "haidou-local-helper", version: 9 }, origin);
+      return send(response, 200, {
+        ok: true,
+        service: "haidou-local-helper",
+        version: HELPER_VERSION,
+        installMode: isSea() ? "desktop" : "node",
+      }, origin);
     }
     if (!allowedOrigin(origin)) return send(response, 403, { error: "ORIGIN_NOT_ALLOWED", message: "该网站未获准连接本地数据助手" }, origin);
 
@@ -132,7 +150,7 @@ export function createHaidouHelper() {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isSea() || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
   const server = createHaidouHelper();
   server.on("error", (error) => {
     if (error?.code === "EADDRINUSE") process.exit(0);

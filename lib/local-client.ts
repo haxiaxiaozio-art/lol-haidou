@@ -1,13 +1,16 @@
 import type { LocalClientPlayer, LocalClientSyncResult } from "./types";
 
 const HELPER_URL = "http://127.0.0.1:3212";
+export const MIN_HELPER_VERSION = 10;
+export const HELPER_DOWNLOAD_URL = "https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe";
+export const HELPER_LAUNCH_URL = "haidou-helper://start";
 let sessionToken = "";
 
 function helperOfflineMessage() {
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
-    return "未找到本地数据助手。请先运行“启动数据助手.cmd”，并允许浏览器访问本地网络";
+    return "未找到本地数据助手。安装并启动助手后，网页会自动重新检测";
   }
-  return "未找到本地数据助手，请重新双击“启动网站.cmd”";
+  return "未找到本地数据助手，请先安装并启动助手";
 }
 
 export class LocalClientError extends Error {
@@ -21,9 +24,10 @@ export class LocalClientError extends Error {
 }
 
 export type LocalConnectionProbe = {
-  status: "checking" | "helper-offline" | "client-offline" | "connected";
+  status: "checking" | "helper-offline" | "helper-outdated" | "client-offline" | "connected";
   message: string;
   code?: string;
+  helperVersion?: number;
   player: LocalClientPlayer | null;
 };
 
@@ -82,9 +86,13 @@ export async function detectCurrentPlayer(): Promise<LocalClientPlayer> {
 }
 
 export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
+  let helperVersion = 0;
   try {
     const health = await fetch(`${HELPER_URL}/v1/health`, { cache: "no-store" });
     if (!health.ok) throw new Error("helper health check failed");
+    const body = await health.json() as { service?: string; version?: number };
+    if (body.service !== "haidou-local-helper") throw new Error("unexpected helper service");
+    helperVersion = Number(body.version ?? 0);
   } catch {
     sessionToken = "";
     return {
@@ -95,11 +103,23 @@ export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
     };
   }
 
+  if (helperVersion < MIN_HELPER_VERSION) {
+    sessionToken = "";
+    return {
+      status: "helper-outdated",
+      message: `数据助手版本过旧（当前 V${helperVersion || "未知"}），请安装最新版`,
+      code: "HELPER_OUTDATED",
+      helperVersion,
+      player: null,
+    };
+  }
+
   try {
     const player = await detectCurrentPlayer();
     return {
       status: "connected",
       message: `已连接 ${player.gameName}#${player.tag} · ${player.region}`,
+      helperVersion,
       player,
     };
   } catch (error) {
@@ -110,6 +130,7 @@ export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
       status: "client-offline",
       message: localError.message,
       code: localError.code,
+      helperVersion,
       player: null,
     };
   }

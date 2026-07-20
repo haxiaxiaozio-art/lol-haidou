@@ -13,8 +13,8 @@ test("website launcher opens the public site and avoids dev-server ports", async
   assert.match(content, /where node/);
   assert.match(content, /127\.0\.0\.1:3212\/v1\/health/);
   assert.match(content, /haxiaxiaozio-art\.github\.io\/lol-haidou/);
-  assert.match(content, /\?v=3/);
-  assert.match(content, /version -ge 9/);
+  assert.match(content, /\?v=4/);
+  assert.match(content, /version -ge 10/);
   assert.match(content, /start-helper\.cmd/);
   assert.doesNotMatch(content, /npm run dev|:3000/);
 });
@@ -52,7 +52,7 @@ test("helper launcher reports existing service and starts only the loopback help
   assert.match(content, /127\.0\.0\.1:3212\/v1\/health/);
   assert.match(content, /already running/);
   assert.match(content, /node helper\\server\.mjs/);
-  assert.match(content, /version -ge 9/);
+  assert.match(content, /version -ge 10/);
 });
 
 test("Chinese helper launcher delegates to the maintained launcher", async () => {

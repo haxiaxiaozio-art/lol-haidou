@@ -4,13 +4,15 @@
 
 ## 在线版本
 
-[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=3)
+[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=4)
 
-在线网站可以直接体验演示数据和 CSV/JSON 导入。读取真实 LOL 战绩时，需要在同一台 Windows 电脑上运行 `启动数据助手.cmd`，并在浏览器提示时允许访问本地网络。线上网站只连接明确列入 `helper/allowed-origins.json` 的正式域名。
+在线网站可以直接体验演示数据和 CSV/JSON 导入。读取真实 LOL 战绩时，在同一台 Windows 电脑上安装[海斗数据助手](https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe)，并在浏览器提示时允许访问本地网络。普通玩家不再需要安装 Node.js，也不需要下载源码。
+
+数据助手安装在当前 Windows 用户目录，安装后自动启动并随登录启动。网页提示未连接时，可以点击“已安装，启动助手”。卸载入口位于 Windows 设置的“已安装的应用”。当前安装包尚未进行商业代码签名，Windows 首次运行可能显示“未知发布者”。
 
 ## 运行
 
-需要 Node.js 22.13 或更高版本。
+普通玩家直接下载安装包即可。以下源码运行方式仅面向开发者，需要 Node.js 22.13 或更高版本。
 
 最简单的方式：先启动 LOL 并登录，再双击项目根目录里的 `启动网站.cmd`。启动脚本会检查并开启仅限本机访问的数据助手，然后直接打开正式网站，不再占用 3000 系列开发端口。网页顶部会自动显示“数据助手未启动”“等待 LOL 登录”或当前 Riot ID。
 
@@ -21,7 +23,7 @@ npm install
 npm run dev
 ```
 
-如果网页提示找不到数据助手，可单独双击 `启动数据助手.cmd` 并保持窗口开启。网页会每隔数秒自动重新检测，不需要反复刷新。
+旧的 `启动数据助手.cmd` 仍可用于开发调试。正式使用建议安装助手，网页会每隔数秒自动重新检测，不需要反复刷新。
 
 ## 读取 LOL 客户端
 

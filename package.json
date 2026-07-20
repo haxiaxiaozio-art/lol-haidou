@@ -1,6 +1,6 @@
 {
   "name": "lol-haidou-mvp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -8,11 +8,13 @@
   "scripts": {
     "dev": "vinext dev",
     "helper": "node helper/server.mjs",
+    "helper:exe": "node scripts/build-helper-exe.mjs",
+    "helper:installer": "npm run helper:exe && node scripts/build-helper-installer.mjs",
     "build": "vinext build",
     "export:pages": "node scripts/export-pages.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next"
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/helper-installer.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern helper-dist --ignore-pattern release"
   },
   "dependencies": {
     "next": "16.2.6",
@@ -27,8 +29,10 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
+    "esbuild": "^0.28.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "postject": "^1.0.0-alpha.6",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

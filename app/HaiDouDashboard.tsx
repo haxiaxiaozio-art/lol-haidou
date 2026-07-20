@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
-import { probeLocalConnection, searchLocalHistory, syncLocalHistory, type LocalConnectionProbe } from "../lib/local-client";
+import {
+  HELPER_DOWNLOAD_URL,
+  HELPER_LAUNCH_URL,
+  probeLocalConnection,
+  searchLocalHistory,
+  syncLocalHistory,
+  type LocalConnectionProbe,
+} from "../lib/local-client";
 import { summarizePlayer } from "../lib/scoring";
 import type { LocalClientPlayer, MatchRecord, PlayerDataset, ScoredMatch } from "../lib/types";
 import styles from "./page.module.css";
@@ -33,6 +40,7 @@ const INITIAL_CONNECTION: LocalConnectionProbe = {
 const CONNECTION_LABEL: Record<LocalConnectionProbe["status"], string> = {
   checking: "正在检测助手",
   "helper-offline": "数据助手未启动",
+  "helper-outdated": "数据助手需要更新",
   "client-offline": "等待 LOL 登录",
   connected: "玩家已连接",
 };
@@ -266,8 +274,45 @@ export default function HaiDouDashboard() {
       return;
     }
     setFlowStatus("idle");
-    setFlowDetail(connection.status === "helper-offline" ? "本地数据助手尚未启动" : "数据助手在线，等待 LOL 客户端登录");
+    setFlowDetail(
+      connection.status === "helper-offline"
+        ? "本地数据助手尚未启动"
+        : connection.status === "helper-outdated"
+          ? "请安装最新版数据助手后继续"
+          : "数据助手在线，等待 LOL 客户端登录",
+    );
     setLookupError(connection.message);
+  };
+
+  const startInstalledHelper = () => {
+    setLookupError("");
+    setFlowStatus("resolving");
+    setFlowDetail("正在请求 Windows 启动数据助手，网页会自动重新检测");
+    window.setTimeout(() => void connectLocalClient(), 1_800);
+    window.setTimeout(() => void connectLocalClient(), 4_500);
+  };
+
+  const helperAction = (compact = false) => {
+    const needsUpdate = localConnection.status === "helper-outdated";
+    const unavailable = localConnection.status === "helper-offline" || needsUpdate;
+    if (!unavailable) {
+      return (
+        <button type="button" onClick={connectLocalClient} disabled={isFlowBusy}>
+          {flowStatus === "resolving" ? "正在检测" : localPlayer ? "重新检测" : "检测登录客户端"}
+        </button>
+      );
+    }
+    return (
+      <div className={styles.helperActions} data-compact={compact ? "true" : "false"}>
+        <a className={styles.helperPrimary} href={HELPER_DOWNLOAD_URL}>
+          {needsUpdate ? "更新助手" : "安装助手"}
+        </a>
+        <a className={styles.helperSecondary} href={HELPER_LAUNCH_URL} onClick={startInstalledHelper}>
+          已安装，启动助手
+        </a>
+        <small>仅支持 Windows，首次安装可能显示“未知发布者”</small>
+      </div>
+    );
   };
 
   const runLocalSync = async () => {
@@ -526,9 +571,7 @@ export default function HaiDouDashboard() {
                     <strong>{localPlayer ? `${localPlayer.region} 已就绪` : "需要登录 LOL 客户端"}</strong>
                     <p>{localPlayer ? `通过 ${localPlayer.gameName}#${localPlayer.tag} 的本机会话查询同区玩家` : localConnection.message}</p>
                   </div>
-                  <button type="button" onClick={connectLocalClient} disabled={isFlowBusy}>
-                    {flowStatus === "resolving" ? "正在检测" : localPlayer ? "重新检测" : "检测登录客户端"}
-                  </button>
+                  {helperAction(true)}
                 </div>
                 <form className={`${styles.lookupForm} ${styles.playerSearchForm}`} onSubmit={runPlayerSearch} noValidate>
                   <label className={styles.nameField}>
@@ -561,12 +604,10 @@ export default function HaiDouDashboard() {
                   <span className={styles.clientStatusMark} aria-hidden="true" />
                   <div>
                     <small>{CONNECTION_LABEL[localConnection.status]}</small>
-                    <strong>{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : localConnection.status === "helper-offline" ? "请双击“启动数据助手.cmd”" : "请启动并登录 LOL"}</strong>
+                    <strong>{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : localConnection.status === "helper-offline" ? "安装助手后即可读取真实战绩" : localConnection.status === "helper-outdated" ? "请更新数据助手" : "请启动并登录 LOL"}</strong>
                     <p>{localPlayer ? `${localPlayer.region} · 身份信息来自本机 League 客户端` : localConnection.message}</p>
                   </div>
-                  <button type="button" onClick={connectLocalClient} disabled={isFlowBusy}>
-                    {flowStatus === "resolving" ? "正在检测" : localPlayer ? "重新检测" : "检测登录客户端"}
-                  </button>
+                  {helperAction()}
                 </div>
                 <div className={styles.syncControls}>
                   <label>

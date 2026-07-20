@@ -65,6 +65,7 @@
 .searchClientLine button { grid-column: 2; width: fit-content; min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-2); color: var(--text-1); cursor: pointer; font-weight: 620; }
 .searchClientLine button:disabled { cursor: wait; opacity: 0.65; }
 .searchClientLine[data-status="checking"] .clientStatusMark { animation: statusPulse 900ms ease-in-out infinite alternate; }
+.searchClientLine[data-status="helper-outdated"] .clientStatusMark { background: var(--danger); box-shadow: 0 0 0 5px var(--danger-soft); }
 .searchClientLine[data-status="client-offline"] .clientStatusMark { background: #d89b25; box-shadow: 0 0 0 5px color-mix(in oklch, #d89b25 18%, transparent); }
 .searchClientLine[data-status="connected"] .clientStatusMark { background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
 .playerSearchForm { grid-template-columns: minmax(200px, 1.4fr) minmax(110px, 0.7fr) minmax(120px, 0.65fr) auto; align-content: center; }
@@ -74,6 +75,7 @@
 .clientStatus { min-width: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); }
 .clientStatusMark { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 5px var(--surface-3); }
 .clientStatus[data-status="checking"] .clientStatusMark { animation: statusPulse 900ms ease-in-out infinite alternate; }
+.clientStatus[data-status="helper-outdated"] .clientStatusMark { background: var(--danger); box-shadow: 0 0 0 5px var(--danger-soft); }
 .clientStatus[data-status="client-offline"] .clientStatusMark { background: #d89b25; box-shadow: 0 0 0 5px color-mix(in oklch, #d89b25 18%, transparent); }
 .clientStatus[data-status="connected"] .clientStatusMark { background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); }
 .clientStatus > div { min-width: 0; display: grid; }
@@ -82,6 +84,12 @@
 .clientStatus p { margin: 3px 0 0; color: var(--text-2); font-size: 12px; }
 .clientStatus button { min-height: 42px; padding: 0 15px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-2); color: var(--text-1); cursor: pointer; font-weight: 620; }
 .clientStatus button:disabled { cursor: wait; opacity: 0.65; }
+.helperActions { min-width: 190px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.helperActions[data-compact="true"] { grid-column: 2; width: min(100%, 290px); min-width: 0; }
+.helperActions a { min-height: 42px; padding: 0 12px; border-radius: var(--radius-m); display: inline-flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; font-size: 12px; font-weight: 680; }
+.helperPrimary { border: 1px solid transparent; background: var(--accent); color: var(--canvas); }
+.helperSecondary { border: 1px solid var(--line); background: var(--surface-2); color: var(--text-1); }
+.helperActions small { grid-column: 1 / -1; color: var(--text-3); font-size: 10px; line-height: 1.35; }
 .syncControls { display: grid; grid-template-columns: minmax(120px, 0.6fr) minmax(190px, 1fr); align-content: center; gap: 9px 12px; padding: 18px 20px; background: var(--surface-2); border-radius: var(--radius-m); }
 .syncControls label { display: grid; gap: 6px; color: var(--text-2); font-size: 12px; }
 .syncControls select { min-height: 46px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); color: var(--text-1); padding: 0 12px; }
@@ -213,7 +221,8 @@
 .footer a { min-height: 40px; display: inline-flex; align-items: center; text-decoration: none; }
 
 @media (hover: hover) {
-  .themeButton:hover, .importActions button:hover, .sourceTabs button:hover:not(:disabled), .clientStatus button:hover:not(:disabled), .searchClientLine button:hover:not(:disabled) { background: var(--surface-3); }
+  .themeButton:hover, .importActions button:hover, .sourceTabs button:hover:not(:disabled), .clientStatus button:hover:not(:disabled), .searchClientLine button:hover:not(:disabled), .helperSecondary:hover { background: var(--surface-3); }
+  .helperPrimary:hover { background: var(--accent-strong); }
   .primaryButton:hover { background: var(--accent-strong); }
   .queryButton:hover:not(:disabled) { background: var(--accent-strong); }
   .matchRow:hover { background: color-mix(in oklch, var(--surface-1) 55%, var(--surface-2)); }
@@ -251,6 +260,7 @@
   .fileFlow { grid-template-columns: 1fr; gap: 20px; }
   .clientStatus { grid-template-columns: 12px minmax(0, 1fr); }
   .clientStatus button { grid-column: 2; width: fit-content; }
+  .clientStatus .helperActions { grid-column: 2; width: min(100%, 320px); }
   .flowFooter { padding-inline: 28px; }
   .profileBand { grid-template-columns: 1fr; }
   .profileCopy { padding: 34px 28px; }
@@ -285,6 +295,8 @@
   .lookupForm { grid-template-columns: 1fr; }
   .playerSearchForm { grid-template-columns: 1fr; }
   .clientStatus { padding: 16px; }
+  .helperActions { grid-template-columns: 1fr; width: 100% !important; }
+  .helperActions small { grid-column: 1; }
   .syncControls { grid-template-columns: 1fr; padding: 16px; }
   .syncControls p { grid-column: 1; }
   .queryButton { width: auto; justify-self: start; }
