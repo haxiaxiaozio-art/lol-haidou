@@ -169,15 +169,79 @@ function championMap(payload) {
   return map;
 }
 
-function augmentMap(payload) {
-  const entries = Array.isArray(payload) ? payload : Object.values(payload ?? {});
+export function augmentMap(payload) {
+  const entries = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.augments)
+      ? payload.augments
+      : Object.values(payload ?? {});
   const map = new Map();
   for (const augment of entries) {
     const id = augment?.id ?? augment?.augmentId;
-    const name = augment?.name ?? augment?.localizedName ?? augment?.title;
+    const name = augment?.nameTRA
+      ?? augment?.simpleNameTRA
+      ?? augment?.name
+      ?? augment?.localizedName
+      ?? augment?.title;
     if (id !== undefined && name) map.set(String(id), String(name));
   }
   return map;
+}
+
+export function parseHistoryGameIds(logText, platformId) {
+  if (typeof logText !== "string" || logText === "") return [];
+  const expectedPlatform = String(platformId ?? "").toUpperCase();
+  const ids = new Set();
+  for (const listMatch of logText.matchAll(/Match ids retrieved:\s*\[([^\]]*)\]/gi)) {
+    for (const idMatch of listMatch[1].matchAll(/([A-Z0-9]+)_(\d+)/gi)) {
+      if (!expectedPlatform || idMatch[1].toUpperCase() === expectedPlatform) ids.add(idMatch[2]);
+    }
+  }
+  return [...ids];
+}
+
+export function gameBelongsToPlayer(game, player) {
+  const keys = new Set([
+    player?.puuid,
+    player?.accountId,
+    player?.summonerId,
+  ].filter(Boolean).map(String));
+  if (keys.size === 0) return false;
+  const identities = game?.participantIdentities ?? game?.identities ?? [];
+  return identities.some((identity) => {
+    const candidate = identity?.player ?? identity;
+    return [candidate?.puuid, candidate?.accountId, candidate?.currentAccountId, candidate?.summonerId]
+      .some((value) => value !== undefined && keys.has(String(value)));
+  });
+}
+
+function historyLogDirectories(executablePath) {
+  return new Set([
+    executablePath ? path.resolve(path.dirname(executablePath), "..", "Game", "Logs", "LeagueClient Logs") : null,
+    ...["C", "D", "E", "F"].map((drive) => `${drive}:\\WeGameApps\\英雄联盟\\Game\\Logs\\LeagueClient Logs`),
+    "C:\\Riot Games\\League of Legends\\Logs\\LeagueClient Logs",
+    "D:\\Riot Games\\League of Legends\\Logs\\LeagueClient Logs",
+    "C:\\Riot Games\\League of Legends\\Game\\Logs\\LeagueClient Logs",
+    "D:\\Riot Games\\League of Legends\\Game\\Logs\\LeagueClient Logs",
+  ].filter(Boolean));
+}
+
+async function historicalGameIds(executablePath, platformId) {
+  const ids = new Set();
+  for (const directory of historyLogDirectories(executablePath)) {
+    try {
+      const logNames = (await readdir(directory))
+        .filter((name) => /_LeagueClient\.log$/i.test(name))
+        .sort((left, right) => right.localeCompare(left));
+      for (const logName of logNames) {
+        const content = await readFile(path.join(directory, logName), "utf8");
+        parseHistoryGameIds(content, platformId).forEach((id) => ids.add(id));
+      }
+    } catch {
+      // Try the next known League client log directory.
+    }
+  }
+  return [...ids].sort((left, right) => Number(right) - Number(left));
 }
 
 export async function getCurrentPlayer() {
@@ -200,18 +264,61 @@ export async function getCurrentPlayer() {
   };
 }
 
-async function historyPages(credentials, player, count) {
+async function recentHistoryGames(credentials, player, count) {
   const identifier = player.puuid ?? player.accountId ?? player.summonerId;
   if (!identifier) throw new ClientUnavailableError("无法识别当前玩家");
-  const payloads = [];
+  const games = [];
+  const seen = new Set();
   for (let begin = 0; begin < count; begin += 100) {
     const end = Math.min(count, begin + 100) - 1;
     const requestPath = `/lol-match-history/v1/products/lol/${encodeURIComponent(identifier)}/matches?begIndex=${begin}&endIndex=${end}`;
     const payload = await lcuRequest(credentials, requestPath);
-    payloads.push(payload);
-    if (extractGames(payload).length < end - begin + 1) break;
+    const pageGames = extractGames(payload);
+    let added = 0;
+    for (const game of pageGames) {
+      const id = String(game?.gameId ?? game?.id ?? "");
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      games.push(game);
+      added += 1;
+    }
+    if (added === 0 || pageGames.length < end - begin + 1) break;
   }
-  return payloads;
+  return games;
+}
+
+const gameTimestamp = (game) => {
+  const numeric = Number(game?.gameCreation ?? game?.gameStartTimestamp ?? game?.gameStartTime);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = Date.parse(game?.gameCreationDate ?? "");
+  return Number.isFinite(parsed) ? parsed : Number(game?.gameId ?? 0);
+};
+
+async function historyGames(credentials, player, count) {
+  const games = await recentHistoryGames(credentials, player, count);
+  if (games.length >= count) return games.slice(0, count);
+
+  const seen = new Set(games.map((game) => String(game?.gameId ?? game?.id ?? "")));
+  const candidateIds = (await historicalGameIds(null, credentials.platformId))
+    .filter((id) => !seen.has(id))
+    .slice(0, 600);
+  const concurrency = 6;
+  for (let index = 0; index < candidateIds.length && games.length < count; index += concurrency) {
+    const batch = candidateIds.slice(index, index + concurrency);
+    const details = await Promise.all(batch.map((id) =>
+      optionalRequest(credentials, `/lol-match-history/v1/games/${encodeURIComponent(id)}`, null)));
+    for (const game of details) {
+      if (!game?.gameId || !gameBelongsToPlayer(game, player)) continue;
+      const id = String(game.gameId);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      games.push(game);
+    }
+  }
+
+  return games
+    .sort((left, right) => gameTimestamp(right) - gameTimestamp(left))
+    .slice(0, count);
 }
 
 export async function syncHistory(requestedCount) {
@@ -220,12 +327,11 @@ export async function syncHistory(requestedCount) {
   if (!allowedCounts.has(count)) throw new Error("场次只能选择 20、40、100 或 200");
 
   const { credentials, player, region } = await getCurrentPlayer();
-  const [payloads, championPayload, augmentPayload] = await Promise.all([
-    historyPages(credentials, player, count),
+  const [scanned, championPayload, augmentPayload] = await Promise.all([
+    historyGames(credentials, player, count),
     optionalRequest(credentials, "/lol-game-data/assets/v1/champion-summary.json", []),
-    optionalRequest(credentials, "/lol-game-data/assets/v1/arena-augments.json", []),
+    optionalRequest(credentials, "/lol-game-data/assets/v1/cherry-augments.json", []),
   ]);
-  const scanned = payloads.flatMap(extractGames).slice(0, count);
   const matches = normalizeHistory([scanned], {
     player,
     champions: championMap(championPayload),

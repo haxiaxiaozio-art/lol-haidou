@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createHaidouHelper } from "../helper/server.mjs";
-import { parseCommandLine } from "../helper/lcu.mjs";
+import { augmentMap, gameBelongsToPlayer, parseCommandLine, parseHistoryGameIds } from "../helper/lcu.mjs";
 import { normalizeHistory } from "../helper/normalize.mjs";
 
 test("champion primary class wins over Tencent ARAM timeline support", () => {
@@ -48,6 +48,25 @@ test("uses match position only when champion classes are missing", () => {
   assert.equal(match.role, "辅助");
 });
 
+test("maps Tencent cherry augment names and parses only the current platform history", () => {
+  const names = augmentMap([
+    { id: 1048, augmentNameId: "ARAM_JeweledGauntlet", nameTRA: "珠光护手" },
+  ]);
+  assert.equal(names.get("1048"), "珠光护手");
+
+  const log = [
+    'Match ids retrieved: ["HN1_111", "WT1_222", "HN1_333"]',
+    'Match ids retrieved: ["HN1_111"]',
+  ].join("\n");
+  assert.deepEqual(parseHistoryGameIds(log, "HN1"), ["111", "333"]);
+  assert.equal(gameBelongsToPlayer({
+    participantIdentities: [{ player: { puuid: "current-player" } }],
+  }, { puuid: "current-player" }), true);
+  assert.equal(gameBelongsToPlayer({
+    participantIdentities: [{ player: { puuid: "someone-else" } }],
+  }, { puuid: "current-player" }), false);
+});
+
 test("LCU command line parser tolerates protected process fields", async () => {
   assert.equal(parseCommandLine(null), null);
   assert.equal(parseCommandLine(undefined), null);
@@ -82,7 +101,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 6);
+  assert.equal(healthBody.version, 7);
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });
   assert.equal(blocked.status, 403);
