@@ -12,6 +12,10 @@ test("LCU command line parser tolerates protected process fields", async () => {
     parseCommandLine('--app-port=54321 --remoting-auth-token="secret" --app-protocol=https'),
     { port: 54321, password: "secret", protocol: "https" },
   );
+  assert.deepEqual(
+    parseCommandLine("000000.000| OKAY| Command line arguments: --region=TENCENT --remoting-auth-token=secret --app-port=60202"),
+    { port: 60202, password: "secret", protocol: "https" },
+  );
   const launcher = await readFile(new URL("../start-helper.cmd", import.meta.url), "utf8");
   assert.match(launcher, /-Verb RunAs/);
 });
@@ -31,7 +35,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 3);
+  assert.equal(healthBody.version, 4);
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });
   assert.equal(blocked.status, 403);

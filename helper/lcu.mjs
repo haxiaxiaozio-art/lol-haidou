@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -71,10 +71,37 @@ async function lockfileCredentials(executablePath) {
   return null;
 }
 
+async function leagueClientLogCredentials(executablePath) {
+  const directories = new Set([
+    executablePath ? path.dirname(executablePath) : null,
+    ...["C", "D", "E", "F"].map((drive) => `${drive}:\\WeGameApps\\英雄联盟\\LeagueClient`),
+    "C:\\Riot Games\\League of Legends",
+    "D:\\Riot Games\\League of Legends",
+  ].filter(Boolean));
+
+  for (const directory of directories) {
+    try {
+      const logNames = (await readdir(directory))
+        .filter((name) => /_LeagueClientUx\.log$/i.test(name))
+        .sort((left, right) => right.localeCompare(left))
+        .slice(0, 3);
+      for (const logName of logNames) {
+        const credentials = parseCommandLine(await readFile(path.join(directory, logName), "utf8"));
+        if (credentials) return credentials;
+      }
+    } catch {
+      // Try the next known League client directory.
+    }
+  }
+  return null;
+}
+
 export async function detectLeagueClient() {
   const process = await processInfo();
   if (!process) throw new ClientUnavailableError("未检测到 League 客户端，请先启动 LOL 并完成登录");
-  const credentials = parseCommandLine(process.CommandLine) ?? await lockfileCredentials(process.ExecutablePath);
+  const credentials = parseCommandLine(process.CommandLine)
+    ?? await lockfileCredentials(process.ExecutablePath)
+    ?? await leagueClientLogCredentials(process.ExecutablePath);
   if (!credentials) throw new ClientUnavailableError("LOL 客户端已启动，但尚未准备好本地数据接口");
   return credentials;
 }
