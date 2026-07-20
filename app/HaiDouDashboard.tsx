@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import Link from "next/link";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
 import { detectCurrentPlayer, syncLocalHistory } from "../lib/local-client";
@@ -316,10 +315,10 @@ export default function HaiDouDashboard() {
     <>
       <a className={styles.skipLink} href="#main-content">跳到主要内容</a>
       <header className={styles.topbar}>
-        <Link className={styles.wordmark} href="/" aria-label="海斗战报首页">
+        <a className={styles.wordmark} href="./" aria-label="海斗战报首页">
           <span className={styles.logoMark}>H</span>
           <span><strong>海斗战报</strong><small>本地数据实验室</small></span>
-        </Link>
+        </a>
         <div className={styles.headerActions}>
           <span className={styles.localBadge}>MVP · LOCAL</span>
           <button className={styles.themeButton} type="button" onClick={toggleTheme} aria-label="切换白天或深夜模式">
@@ -574,7 +573,7 @@ export default function HaiDouDashboard() {
 
       <footer className={styles.footer}>
         <span>海斗战报 MVP · 数据仅在当前浏览器处理</span>
-        <nav aria-label="页脚"><Link href="/privacy">隐私说明</Link><Link href="/terms">使用边界</Link></nav>
+        <nav aria-label="页脚"><a href="./privacy/">隐私说明</a><a href="./terms/">使用边界</a></nav>
       </footer>
     </>
   );

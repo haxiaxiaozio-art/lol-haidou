@@ -9,9 +9,10 @@
     "dev": "vinext dev",
     "helper": "node helper/server.mjs",
     "build": "vinext build",
+    "export:pages": "npm run build && node scripts/export-pages.mjs",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/static-export.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next"
   },
   "dependencies": {
     "next": "16.2.6",

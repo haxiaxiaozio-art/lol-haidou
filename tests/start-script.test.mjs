@@ -21,7 +21,7 @@ for (const script of scripts) {
   });
 }
 
-test("launcher parses and reaches the start branch in cmd.exe", async () => {
+test("launcher parses and reaches the start branch in cmd.exe", { skip: process.platform !== "win32" }, async () => {
   const content = await readFile(new URL("../start-site.cmd", import.meta.url), "utf8");
   const fixture = content
     .replace(/^powershell\.exe .*helper\/server\.mjs.*$/m, "rem helper disabled in launcher fixture")

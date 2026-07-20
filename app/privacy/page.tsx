@@ -1,9 +1,8 @@
-import Link from "next/link";
 import styles from "../legal.module.css";
 
 export default function PrivacyPage() {
   return <main className={styles.shell}>
-    <Link className={styles.back} href="/">← 返回海斗战报</Link>
+    <a className={styles.back} href="../">← 返回海斗战报</a>
     <h1>隐私说明</h1>
     <p>这是一个本地 MVP，帮助你验证海斗数据导入和评分体验。</p>
     <div className={styles.content}>

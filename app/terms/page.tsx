@@ -1,9 +1,8 @@
-import Link from "next/link";
 import styles from "../legal.module.css";
 
 export default function TermsPage() {
   return <main className={styles.shell}>
-    <Link className={styles.back} href="/">← 返回海斗战报</Link>
+    <a className={styles.back} href="../">← 返回海斗战报</a>
     <h1>使用边界</h1>
     <p>本页面提供第三方赛后统计实验，不代表官方竞技排名。</p>
     <div className={styles.content}>
