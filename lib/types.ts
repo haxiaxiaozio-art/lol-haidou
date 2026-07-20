@@ -69,7 +69,13 @@ export type ScoredMatch = {
   survivalScore: number;
   recallApplied: boolean;
   dimensions: DimensionScore[];
-  roleComponents: Array<{ role: Role; weight: number; score: number }>;
+  roleComponents: Array<{
+    role: Role;
+    kind: "primary" | "secondary";
+    weight: number;
+    score: number;
+    contribution: number;
+  }>;
 };
 
 export type PlayerSummary = {

@@ -7,6 +7,7 @@ import type {
   ScoredMatch,
 } from "./types";
 import { ROLES } from "./types";
+import { combineRoleScores } from "./role-scoring.mjs";
 
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
@@ -88,15 +89,32 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
   const primary = scoreRole(match.role);
   const secondaryRole = match.secondaryRole === match.role ? undefined : match.secondaryRole;
   const secondary = secondaryRole ? scoreRole(secondaryRole) : null;
+  const combinedRoleScore = combineRoleScores(primary.score, secondary?.score);
   const roleComponents = secondary && secondaryRole
     ? [
-        { role: match.role, weight: 0.6, score: Math.round(primary.score) },
-        { role: secondaryRole, weight: 0.4, score: Math.round(secondary.score) },
+        {
+          role: match.role,
+          kind: "primary" as const,
+          weight: 1,
+          score: combinedRoleScore.primaryScore,
+          contribution: combinedRoleScore.primaryScore,
+        },
+        {
+          role: secondaryRole,
+          kind: "secondary" as const,
+          weight: 0.4,
+          score: combinedRoleScore.secondaryScore ?? 0,
+          contribution: combinedRoleScore.secondaryBonus,
+        },
       ]
-    : [{ role: match.role, weight: 1, score: Math.round(primary.score) }];
-  const positiveScore = secondary
-    ? primary.score * 0.6 + secondary.score * 0.4
-    : primary.score;
+    : [{
+        role: match.role,
+        kind: "primary" as const,
+        weight: 1,
+        score: combinedRoleScore.primaryScore,
+        contribution: combinedRoleScore.primaryScore,
+      }];
+  const positiveScore = combinedRoleScore.total;
 
   const dimensions: DimensionScore[] = primary.dimensions;
 

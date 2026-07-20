@@ -120,16 +120,16 @@ function MatchRow({ item }: { item: ScoredMatch }) {
       </div>
       <details className={styles.matchDetails}>
         <summary>评分明细</summary>
-        <div className={styles.roleBlend} aria-label="职业复合评分">
+        <div className={styles.roleBlend} aria-label="主职业基础分与副职业加权奖励">
           <span>职业评分</span>
           {item.roleComponents.map((component) => (
             <div key={component.role}>
-              <strong>{component.role}</strong>
-              <b>{component.score}</b>
-              <small>× {Math.round(component.weight * 100)}%</small>
+              <strong>{component.kind === "primary" ? "主" : "副"}·{component.role}</strong>
+              <b>{component.kind === "secondary" ? `+${component.contribution}` : component.score}</b>
+              <small>{component.kind === "secondary" ? `${component.score} × 40%` : "完整计分"}</small>
             </div>
           ))}
-          {item.roleComponents.length === 2 && <em>融合后 {item.positiveScore}</em>}
+          {item.roleComponents.length === 2 && <em>加权后 {item.positiveScore} · 上限 100</em>}
         </div>
         <div className={styles.dimensionGrid}>
           {item.dimensions.map((dimension) => (
@@ -387,7 +387,7 @@ export default function HaiDouDashboard() {
         <section className={styles.flowDeck} aria-labelledby="flow-title">
           <div className={styles.flowHeader}>
             <div>
-            <span className={styles.flowKicker}>主流程 · V0.4</span>
+            <span className={styles.flowKicker}>主流程 · V0.5</span>
               <h1 id="flow-title">从玩家身份开始生成海斗战报</h1>
               <p>登录 LOL 后可直接读取当前玩家与最近战绩，也可以继续使用演示检索或导入自己的文件。</p>
             </div>
@@ -607,7 +607,7 @@ export default function HaiDouDashboard() {
           <div className={styles.matchesHeader}>
             <div className={styles.sectionHeading}>
               <div><span>比赛时间带</span><h2 id="matches-title">近期对局</h2></div>
-              <small>主职业 60% + 副职业 40%，死亡规则仅计算一次</small>
+              <small>主职业完整计分 + 副职业 40% 奖励，死亡规则仅计算一次</small>
             </div>
             <div className={styles.segmented} aria-label="筛选近期对局">
               {(["全部", "胜利", "失败"] as MatchFilter[]).map((option) => (
@@ -622,7 +622,7 @@ export default function HaiDouDashboard() {
 
         <aside className={styles.methodNote}>
           <span>评分说明</span>
-          <p>当前 MVP 使用固定职业基线验证产品体验。双职业英雄分别计算主副职业正向分，再按 60% / 40% 融合；死亡与“作弊：我能回城！”规则只在融合后应用一次。正式数据源接入后，将切换为同版本、同模式、同英雄的样本百分位。</p>
+          <p>当前 MVP 使用固定职业基线验证产品体验。双职业英雄保留主职业完整正向分，并额外加入副职业得分的 40% 作为奖励，正向分最高 100；死亡与“作弊：我能回城！”规则只在加权后应用一次。正式数据源接入后，将切换为同版本、同模式、同英雄的样本百分位。</p>
         </aside>
       </main>
 

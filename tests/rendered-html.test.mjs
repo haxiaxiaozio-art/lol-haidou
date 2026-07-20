@@ -29,8 +29,8 @@ test("renders the HaiDou dashboard", async () => {
   assert.match(html, /200 场/);
   assert.match(html, /辅助 \/ 法师/);
   assert.match(html, /职业评分/);
-  assert.match(html, /融合后/);
-  assert.match(html, /主职业 60% \+ 副职业 40%/);
+  assert.match(html, /加权后/);
+  assert.match(html, /主职业完整计分 \+ 副职业 40% 奖励/);
   assert.match(html, /白天|深夜/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
 });
