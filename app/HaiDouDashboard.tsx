@@ -38,6 +38,7 @@ const CONNECTION_LABEL: Record<LocalConnectionProbe["status"], string> = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",

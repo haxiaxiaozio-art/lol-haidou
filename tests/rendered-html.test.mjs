@@ -20,6 +20,7 @@ test("renders the HaiDou dashboard", async () => {
   assert.match(html, /CSV \/ JSON/);
   assert.match(html, /本地 LOL 客户端/);
   assert.match(html, /正在检测助手/);
+  assert.match(html, /07\/19 22:20/);
   assert.match(html, /登录 LOL 后可直接读取当前玩家与最近战绩/);
   assert.match(html, /生成演示战报/);
   assert.match(html, /20 场/);
