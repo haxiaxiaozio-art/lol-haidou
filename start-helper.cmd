@@ -8,20 +8,9 @@ call :helper_ready
 if not errorlevel 1 goto already_running
 
 call :stop_legacy_helper
+if errorlevel 3 goto elevated_stop
 if errorlevel 1 goto port_conflict
-
-call :is_admin
-if not errorlevel 1 goto launch_helper
-
-for /f "delims=" %%N in ('where node') do if not defined HAIDOU_NODE set "HAIDOU_NODE=%%N"
-echo Administrator permission is required to read an elevated WeGame LOL client.
-echo Windows will show a User Account Control prompt for Node.js.
-powershell.exe -NoProfile -NonInteractive -Command "try { Start-Process -Verb RunAs -WindowStyle Normal -FilePath '%HAIDOU_NODE%' -ArgumentList 'helper/server.mjs' -WorkingDirectory '%CD%'; exit 0 } catch { exit 1 }"
-if errorlevel 1 goto elevation_failed
-echo HaiDou local data helper was started with administrator permission.
-echo Return to the website; player login status refreshes automatically.
-pause
-exit /b 0
+goto launch_helper
 
 :launch_helper
 echo HaiDou local data helper is starting at http://127.0.0.1:3212
@@ -38,12 +27,17 @@ powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestM
 exit /b %errorlevel%
 
 :stop_legacy_helper
-powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1 } catch { exit 0 }; if ($health.service -ne 'haidou-local-helper') { exit 2 }; $connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $connection) { exit 0 }; $ownerProcess = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue; if ($null -eq $ownerProcess -or $ownerProcess.ProcessName -ne 'node') { exit 2 }; Stop-Process -Id $connection.OwningProcess -Force; Start-Sleep -Milliseconds 400; exit 0"
+powershell.exe -NoProfile -NonInteractive -Command "try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:3212/v1/health' -TimeoutSec 1 } catch { exit 0 }; if ($health.service -ne 'haidou-local-helper') { exit 2 }; $connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $connection) { exit 0 }; $ownerProcess = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue; if ($null -eq $ownerProcess -or $ownerProcess.ProcessName -ne 'node') { exit 2 }; try { Stop-Process -Id $connection.OwningProcess -Force -ErrorAction Stop; Start-Sleep -Milliseconds 400; exit 0 } catch { exit 3 }"
 exit /b %errorlevel%
 
-:is_admin
-powershell.exe -NoProfile -NonInteractive -Command "$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $principal = New-Object Security.Principal.WindowsPrincipal($identity); if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 }; exit 1"
-exit /b %errorlevel%
+:elevated_stop
+for /f "delims=" %%P in ('powershell.exe -NoProfile -NonInteractive -Command "$connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue ^| Select-Object -First 1; if ($null -ne $connection) { Write-Output $connection.OwningProcess }"') do set "HAIDOU_OLD_PID=%%P"
+if not defined HAIDOU_OLD_PID goto port_conflict
+echo Windows needs permission once to replace the older HaiDou helper.
+powershell.exe -NoProfile -NonInteractive -Command "try { $process = Start-Process -Verb RunAs -Wait -WindowStyle Hidden -FilePath 'taskkill.exe' -ArgumentList '/PID','%HAIDOU_OLD_PID%','/F' -PassThru; exit $process.ExitCode } catch { exit 1 }"
+if errorlevel 1 goto elevation_failed
+timeout /t 1 /nobreak >nul
+goto launch_helper
 
 :already_running
 echo HaiDou local data helper is already running at http://127.0.0.1:3212
@@ -58,7 +52,7 @@ pause
 exit /b 1
 
 :elevation_failed
-echo Administrator permission was not granted, so the WeGame LOL client cannot be read.
+echo Administrator permission was not granted, so the older HaiDou helper is still running.
 pause
 exit /b 1
 

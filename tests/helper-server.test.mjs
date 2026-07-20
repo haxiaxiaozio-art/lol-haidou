@@ -18,6 +18,8 @@ test("LCU command line parser tolerates protected process fields", async () => {
   );
   const launcher = await readFile(new URL("../start-helper.cmd", import.meta.url), "utf8");
   assert.match(launcher, /-Verb RunAs/);
+  assert.match(launcher, /taskkill\.exe/);
+  assert.doesNotMatch(launcher, /-FilePath '%HAIDOU_NODE%'/);
 });
 
 test("local helper exposes health and protects private routes", async (context) => {
