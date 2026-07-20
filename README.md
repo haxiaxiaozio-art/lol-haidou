@@ -4,6 +4,8 @@
 
 ## 在线版本
 
+[打开海斗战报在线版](https://lol-haidou.haxiaxiaozio.chatgpt.site)
+
 在线网站可以直接体验演示数据和 CSV/JSON 导入。读取真实 LOL 战绩时，需要在同一台 Windows 电脑上运行 `启动数据助手.cmd`，并在浏览器提示时允许访问本地网络。线上网站只连接明确列入 `helper/allowed-origins.json` 的正式域名。
 
 ## 运行
