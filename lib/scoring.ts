@@ -1,4 +1,5 @@
 import type {
+  CalibrationModel,
   DimensionScore,
   MatchRecord,
   PlayerDataset,
@@ -69,14 +70,16 @@ const ROLE_DIMENSIONS: Record<Role, DimensionDefinition[]> = {
   ],
 };
 
-export function scoreMatch(match: MatchRecord): ScoredMatch {
+export function scoreMatch(match: MatchRecord, calibration?: CalibrationModel | null): ScoredMatch {
   const scoreRole = (role: Role) => {
     const definitions = ROLE_DIMENSIONS[role];
-    const dimensions: DimensionScore[] = definitions.map((definition) => {
+    const calibratedRole = calibration?.roles.find((entry) => entry.role === role);
+    const dimensions: DimensionScore[] = definitions.map((definition, index) => {
       const value = definition.value(match);
+      const expected = calibratedRole?.expected[index] ?? definition.expected;
       return {
         label: definition.label,
-        score: Math.round(metricScore(value, definition.expected)),
+        score: Math.round(metricScore(value, expected)),
         displayValue: definition.format(value),
       };
     });
@@ -90,7 +93,8 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
   const primary = scoreRole(match.role);
   const secondaryRole = match.secondaryRole === match.role ? undefined : match.secondaryRole;
   const secondary = secondaryRole ? scoreRole(secondaryRole) : null;
-  const combinedRoleScore = combineRoleScores(primary.score, secondary?.score);
+  const secondaryBonusWeight = calibration?.secondaryBonusWeight ?? 0.4;
+  const combinedRoleScore = combineRoleScores(primary.score, secondary?.score, secondaryBonusWeight);
   const roleComponents = secondary && secondaryRole
     ? [
         {
@@ -103,7 +107,7 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
         {
           role: secondaryRole,
           kind: "secondary" as const,
-          weight: 0.4,
+          weight: secondaryBonusWeight,
           score: combinedRoleScore.secondaryScore ?? 0,
           contribution: combinedRoleScore.secondaryBonus,
         },
@@ -122,7 +126,7 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
   const effectiveDeaths = match.recall
     ? match.recall.deathsBefore + match.recall.deathsAfter * 2.5
     : match.deaths;
-  const deathsPerTen = (effectiveDeaths / Math.max(match.durationMinutes, 1)) * 10;
+  const deathsPerTen = (effectiveDeaths / Math.max(match.durationMinutes, 1)) * 10 * (calibration?.deathPenaltyScale ?? 1);
   const survivalScore = clamp(50 + 38 * Math.tanh((5.3 - deathsPerTen) / 2.7), 4, 98);
 
   let finalScore: number;
@@ -145,10 +149,10 @@ export function scoreMatch(match: MatchRecord): ScoredMatch {
   };
 }
 
-export function summarizePlayer(dataset: PlayerDataset): PlayerSummary {
+export function summarizePlayer(dataset: PlayerDataset, calibration?: CalibrationModel | null): PlayerSummary {
   const scoredMatches = [...dataset.matches]
     .sort((a, b) => Date.parse(b.playedAt) - Date.parse(a.playedAt))
-    .map(scoreMatch);
+    .map((match) => scoreMatch(match, calibration));
   const wins = dataset.matches.filter((match) => match.win).length;
   const confidenceFactor = dataset.matches.length / (dataset.matches.length + 10);
   const weighted = scoredMatches.reduce(
@@ -186,6 +190,6 @@ export function summarizePlayer(dataset: PlayerDataset): PlayerSummary {
     heroes,
     augments,
     favoriteItems,
-    highlights: scoredMatches.filter((item) => item.score >= 88).slice(0, 5),
+    highlights: scoredMatches.filter((item) => item.score >= (calibration?.highlightThreshold ?? 88)).slice(0, 5),
   };
 }

@@ -35,6 +35,13 @@ export type MatchRecord = {
   augments: string[];
   items?: string[];
   recall?: RecallRule;
+  dataQuality?: {
+    metricsPresent: Array<keyof MatchMetrics>;
+    roleSource: "champion-primary" | "position-fallback" | "provided" | "unknown";
+    augmentsPresent: boolean;
+    itemsPresent: boolean;
+    recallTimeline: "exact" | "unavailable";
+  };
 };
 
 export type PlayerDataset = {
@@ -61,12 +68,32 @@ export type NetworkRatingEstimate = {
   status: "calibrating" | "provisional" | "stable";
 };
 
+export type CalibrationModel = {
+  version: string;
+  generatedAt: string;
+  status: "collecting" | "calibrating" | "stable";
+  totalSamples: number;
+  minimumRoleSamples: number;
+  highlightThreshold: number;
+  secondaryBonusWeight: number;
+  deathPenaltyScale: number;
+  roles: Array<{
+    role: Role;
+    samples: number;
+    confidence: number;
+    expected: number[];
+  }>;
+};
+
 export type LocalClientSyncResult = {
   dataset: PlayerDataset;
   scannedCount: number;
   haidouCount: number;
   networkRating: NetworkRatingEstimate | null;
   networkRatingError: string;
+  calibrationModel: CalibrationModel | null;
+  calibrationAccepted: number;
+  calibrationError: string;
 };
 
 export type DimensionScore = {

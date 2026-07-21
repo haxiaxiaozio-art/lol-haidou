@@ -1,4 +1,4 @@
-HaiDou Data Helper 0.3.1
+HaiDou Data Helper 0.4.0
 
 This helper runs only on 127.0.0.1:3212 and reads the signed-in League Client on this Windows PC.
 It does not request or store a League or WeGame password.

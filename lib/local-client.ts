@@ -1,7 +1,7 @@
 import type { LocalClientPlayer, LocalClientSyncResult } from "./types";
 
 const HELPER_URL = "http://127.0.0.1:3212";
-export const MIN_HELPER_VERSION = 12;
+export const MIN_HELPER_VERSION = 13;
 export const HELPER_DOWNLOAD_URL = "https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe";
 export const HELPER_LAUNCH_URL = "haidou-helper://start";
 let sessionToken = "";
@@ -136,10 +136,10 @@ export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
   }
 }
 
-export async function syncLocalHistory(count: 20 | 40 | 100 | 200): Promise<LocalClientSyncResult> {
+export async function syncLocalHistory(count: 20 | 40 | 100 | 200, contributeCalibration = false): Promise<LocalClientSyncResult> {
   return helperRequest<LocalClientSyncResult>("/v1/sync", {
     method: "POST",
-    body: JSON.stringify({ count }),
+    body: JSON.stringify({ count, contributeCalibration }),
   });
 }
 

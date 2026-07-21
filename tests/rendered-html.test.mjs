@@ -32,7 +32,9 @@ test("renders the HaiDou dashboard", async () => {
   assert.match(html, /辅助 \/ 法师/);
   assert.match(html, /职业评分/);
   assert.match(html, /加权后/);
-  assert.match(html, /主职业完整计分 \+ 副职业 40% 奖励/);
+  assert.match(html, /数据质量与真实样本校准/);
+  assert.match(html, /质量只说明数据是否足够完整/);
+  assert.match(html, /副职业奖励/);
   assert.match(html, /战绩扫描上限/);
   assert.match(html, /前 10 名覆盖/);
   assert.match(html, /最爱出装/);
@@ -49,4 +51,6 @@ test("renders local privacy guidance", async () => {
   const html = await response.text();
   assert.match(html, /不会上传到服务器/);
   assert.match(html, /单向哈希处理/);
+  assert.match(html, /默认关闭/);
+  assert.match(html, /检索其他玩家时不会提交校准样本/);
 });

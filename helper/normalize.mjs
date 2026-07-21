@@ -103,7 +103,7 @@ function rolesForChampion(champion, participant) {
 
   const championRoles = classify(Array.isArray(champion?.roles) ? champion.roles : []);
   if (championRoles.length) {
-    return { role: championRoles[0], secondaryRole: championRoles[1] };
+    return { role: championRoles[0], secondaryRole: championRoles[1], roleSource: "champion-primary" };
   }
 
   const positionRole = classify([
@@ -111,7 +111,7 @@ function rolesForChampion(champion, participant) {
     participant?.individualPosition,
     participant?.timeline?.role,
   ])[0] ?? "战士";
-  return { role: positionRole };
+  return { role: positionRole, roleSource: positionRole ? "position-fallback" : "unknown" };
 }
 
 function augmentLabel(id, augmentNames) {
@@ -157,30 +157,51 @@ export function normalizeMatch(game, context) {
   const gameVersion = String(firstValue(game?.gameVersion, game?.version, "未知版本"));
   const patchParts = gameVersion.split(".");
   const roles = rolesForChampion(champion, participant);
+  const rawMetrics = {
+    damage: firstValue(stats?.totalDamageDealtToChampions, stats?.damageDealtToChampions),
+    controlSeconds: firstValue(stats?.timeCCingOthers, stats?.totalTimeCCDealt, stats?.totalTimeCrowdControlDealt),
+    healing: firstValue(stats?.totalHealsOnTeammates, stats?.totalHealOnTeammates),
+    shielding: firstValue(stats?.totalDamageShieldedOnTeammates, stats?.damageShieldedOnTeammates),
+    mitigated: firstValue(stats?.damageSelfMitigated, stats?.totalDamageMitigated),
+    damageTaken: stats?.totalDamageTaken,
+    selfHealing: firstValue(stats?.totalHeal, stats?.totalSelfHeal),
+    gold: stats?.goldEarned,
+  };
+  const items = itemIds(participant);
+  const itemFieldsPresent = Array.isArray(participant?.items) || Array.isArray(stats?.items)
+    || ["item0", "item1", "item2", "item3", "item4", "item5"].some((key) => Object.prototype.hasOwnProperty.call(stats, key));
 
   return {
     id: String(firstValue(game?.gameId, game?.id, `${Date.now()}-${championId}`)),
     playedAt: gameTime(game),
     patch: patchParts.length >= 2 ? `${patchParts[0]}.${patchParts[1]}` : gameVersion,
     champion: String(championName),
-    ...roles,
+    role: roles.role,
+    ...(roles.secondaryRole ? { secondaryRole: roles.secondaryRole } : {}),
     win: Boolean(firstValue(stats?.win, participant?.win, false)),
     durationMinutes: durationMinutes(game, stats),
     kills: numberValue(stats?.kills),
     deaths: numberValue(stats?.deaths),
     assists: numberValue(stats?.assists),
     metrics: {
-      damage: numberValue(firstValue(stats?.totalDamageDealtToChampions, stats?.damageDealtToChampions)),
-      controlSeconds: numberValue(firstValue(stats?.timeCCingOthers, stats?.totalTimeCCDealt, stats?.totalTimeCrowdControlDealt)),
-      healing: numberValue(firstValue(stats?.totalHealsOnTeammates, stats?.totalHealOnTeammates)),
-      shielding: numberValue(firstValue(stats?.totalDamageShieldedOnTeammates, stats?.damageShieldedOnTeammates)),
-      mitigated: numberValue(firstValue(stats?.damageSelfMitigated, stats?.totalDamageMitigated)),
-      damageTaken: numberValue(stats?.totalDamageTaken),
-      selfHealing: numberValue(firstValue(stats?.totalHeal, stats?.totalSelfHeal)),
-      gold: numberValue(stats?.goldEarned),
+      damage: numberValue(rawMetrics.damage),
+      controlSeconds: numberValue(rawMetrics.controlSeconds),
+      healing: numberValue(rawMetrics.healing),
+      shielding: numberValue(rawMetrics.shielding),
+      mitigated: numberValue(rawMetrics.mitigated),
+      damageTaken: numberValue(rawMetrics.damageTaken),
+      selfHealing: numberValue(rawMetrics.selfHealing),
+      gold: numberValue(rawMetrics.gold),
     },
     augments: augments.map((id) => augmentLabel(id, context.augmentNames)),
-    items: itemIds(participant).map((id) => itemLabel(id, context.itemNames)),
+    items: items.map((id) => itemLabel(id, context.itemNames)),
+    dataQuality: {
+      metricsPresent: Object.entries(rawMetrics).filter(([, value]) => value !== undefined && value !== null).map(([key]) => key),
+      roleSource: roles.roleSource,
+      augmentsPresent: augments.length > 0,
+      itemsPresent: itemFieldsPresent,
+      recallTimeline: "unavailable",
+    },
   };
 }
 

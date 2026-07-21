@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$productVersion = "0.3.1"
+$productVersion = "0.4.0"
 $sourceDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDirectory = Join-Path $env:LOCALAPPDATA "HaiDouHelper"
 $helperPath = Join-Path $installDirectory "HaiDouHelper.exe"

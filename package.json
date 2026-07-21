@@ -1,6 +1,6 @@
 {
   "name": "lol-haidou-mvp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -14,8 +14,8 @@
     "export:pages": "node scripts/export-pages.mjs",
     "start": "vinext start",
     "db:generate": "drizzle-kit generate",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/helper-installer.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs tests/player-summary.test.mjs tests/match-commentary.test.mjs tests/network-rating.test.mjs tests/rating-graph.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern helper-dist --ignore-pattern release"
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/start-script.test.mjs tests/helper-normalize.test.mjs tests/helper-server.test.mjs tests/helper-installer.test.mjs tests/static-export.test.mjs tests/role-scoring.test.mjs tests/player-summary.test.mjs tests/match-commentary.test.mjs tests/network-rating.test.mjs tests/rating-graph.test.mjs tests/calibration-core.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern pages-dist --ignore-pattern .next --ignore-pattern .wrangler --ignore-pattern helper-dist --ignore-pattern release"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

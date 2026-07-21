@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { buildPlayerDataset, extractGames, normalizeHistory } from "./normalize.mjs";
 import { buildRatingGraph, submitRatingGraph } from "./rating-network.mjs";
+import { syncCalibration } from "./calibration-network.mjs";
 
 const execFileAsync = promisify(execFile);
 const POWER_SHELL = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
@@ -377,7 +378,7 @@ function validatedMatchCount(requestedCount) {
   return count;
 }
 
-async function buildHistoryResult(credentials, player, region, count) {
+async function buildHistoryResult(credentials, player, region, count, contributeCalibration = false) {
   const [scanned, championPayload, augmentPayload, itemPayload] = await Promise.all([
     historyGames(credentials, player, count),
     optionalRequest(credentials, "/lol-game-data/assets/v1/champion-summary.json", []),
@@ -392,12 +393,22 @@ async function buildHistoryResult(credentials, player, region, count) {
   });
   let networkRating = null;
   let networkRatingError = "";
+  let calibrationModel = null;
+  let calibrationAccepted = 0;
+  let calibrationError = "";
+  const regionCode = credentials.platformId ?? region?.webRegion ?? region?.region;
   try {
-    const regionCode = credentials.platformId ?? region?.webRegion ?? region?.region;
     const graph = buildRatingGraph(scanned, player, regionCode, matches.map((match) => match.id));
     networkRating = await submitRatingGraph(graph);
   } catch (error) {
     networkRatingError = error instanceof Error ? error.message : "网络估算服务暂时不可用";
+  }
+  try {
+    const calibration = await syncCalibration(matches, player, regionCode, contributeCalibration);
+    calibrationModel = calibration.model;
+    calibrationAccepted = calibration.accepted;
+  } catch (error) {
+    calibrationError = error instanceof Error ? error.message : "真实样本校准服务暂时不可用";
   }
   return {
     dataset: buildPlayerDataset({ player, region, matches }),
@@ -405,18 +416,21 @@ async function buildHistoryResult(credentials, player, region, count) {
     haidouCount: matches.length,
     networkRating,
     networkRatingError,
+    calibrationModel,
+    calibrationAccepted,
+    calibrationError,
   };
 }
 
-export async function syncHistory(requestedCount) {
+export async function syncHistory(requestedCount, contributeCalibration = false) {
   const count = validatedMatchCount(requestedCount);
   const { credentials, player, region } = await getCurrentPlayer();
-  return buildHistoryResult(credentials, player, region, count);
+  return buildHistoryResult(credentials, player, region, count, contributeCalibration === true);
 }
 
 export async function syncPlayerHistory(gameName, tagLine, requestedCount) {
   const count = validatedMatchCount(requestedCount);
   const { credentials, region } = await getCurrentPlayer();
   const player = await getSummonerByAlias(credentials, gameName, tagLine);
-  return buildHistoryResult(credentials, player, region, count);
+  return buildHistoryResult(credentials, player, region, count, false);
 }

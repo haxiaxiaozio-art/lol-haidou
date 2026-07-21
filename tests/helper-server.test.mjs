@@ -115,7 +115,7 @@ test("local helper exposes health and protects private routes", async (context) 
   assert.equal(health.status, 200);
   const healthBody = await health.json();
   assert.equal(healthBody.service, "haidou-local-helper");
-  assert.equal(healthBody.version, 12);
+  assert.equal(healthBody.version, 13);
   assert.equal(healthBody.installMode, "node");
 
   const blocked = await fetch(`${base}/v1/session`, { method: "POST" });

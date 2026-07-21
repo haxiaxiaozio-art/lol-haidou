@@ -93,6 +93,13 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
           deathsAfter: numberValue(value.deathsAfterRecall ?? value.deaths_after_recall ?? 0, "回城后死亡"),
         }
       : undefined,
+    dataQuality: {
+      metricsPresent: ["damage", "controlSeconds", "healing", "shielding", "mitigated", "damageTaken", "selfHealing", "gold"],
+      roleSource: "provided",
+      augmentsPresent: value.augments !== undefined,
+      itemsPresent: value.items !== undefined,
+      recallTimeline: hasRecall ? "exact" : "unavailable",
+    },
   };
 };
 
