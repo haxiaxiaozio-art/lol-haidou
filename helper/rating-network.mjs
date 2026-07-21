@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const DEFAULT_RATING_API = "https://lol-haidou.haxiaxiaozio.chatgpt.site/api/rating";
+export const DEFAULT_RATING_API = "https://lol-haidou-rating.haxiaxiaozio.workers.dev/api/rating";
 
 const hash = (namespace, region, value) => createHash("sha256")
   .update(`${namespace}|${region}|${String(value)}`, "utf8")
@@ -88,13 +88,13 @@ export async function submitRatingGraph(graph) {
     const query = new URL(api);
     query.searchParams.set("region", graph.region);
     query.searchParams.set("player", graph.targetHash);
-    return (await ratingRequest(query, { headers: { "User-Agent": "HaiDouHelper/11" } })).estimate;
+    return (await ratingRequest(query, { headers: { "User-Agent": "HaiDouHelper/12" } })).estimate;
   }
   for (let offset = 0; offset < graph.matches.length; offset += 20) {
     const body = { ...graph, matches: graph.matches.slice(offset, offset + 20) };
     lastResult = await ratingRequest(api, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "HaiDouHelper/11" },
+      headers: { "Content-Type": "application/json", "User-Agent": "HaiDouHelper/12" },
       body: JSON.stringify(body),
     });
   }

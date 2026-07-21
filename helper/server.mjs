@@ -12,7 +12,7 @@ const configuredPort = Number(process.env.HAIDOU_PORT ?? DEFAULT_PORT);
 const PORT = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
   ? configuredPort
   : DEFAULT_PORT;
-const HELPER_VERSION = 11;
+const HELPER_VERSION = 12;
 const sessions = new Map();
 const SESSION_TTL = 15 * 60 * 1000;
 const helperDirectory = isSea() ? dirname(process.execPath) : dirname(fileURLToPath(import.meta.url));

@@ -4,7 +4,7 @@
 
 ## 在线版本
 
-[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=5)
+[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=6)
 
 在线网站可以直接体验演示数据和 CSV/JSON 导入。读取真实 LOL 战绩时，在同一台 Windows 电脑上安装[海斗数据助手](https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe)，并在浏览器提示时允许访问本地网络。普通玩家不再需要安装 Node.js，也不需要下载源码。
 
@@ -34,7 +34,11 @@ npm run dev
 
 检索其他玩家时，选择“检索玩家”，输入完整的 `游戏名#尾标` 并选择场次。当前版本通过已登录客户端的本机会话查询同大区玩家，暂不支持未登录检索或跨大区检索。
 
-本地数据助手只监听 `127.0.0.1:3212`，只接受本机网页请求，不读取 LOL 或 WeGame 密码，也不会把战绩上传到远端。它读取 League Client 本地接口；该接口不是 Riot 正式支持的稳定公共 API，客户端更新后可能需要同步调整连接器。
+本地数据助手只监听 `127.0.0.1:3212`，只接受本机网页请求，不读取 LOL 或 WeGame 密码。操作评分、英雄、海克斯、出装和逐局详情仍只在本机处理；网络估算分仅向线上服务提交经过 SHA-256 匿名化的玩家关系、胜负、对局时间与版本，不上传 Riot ID、昵称或完整战绩。它读取 League Client 本地接口；该接口不是 Riot 正式支持的稳定公共 API，客户端更新后可能需要同步调整连接器。
+
+## 网络估算分
+
+V12 数据助手会把匿名胜负关系提交到独立的 Cloudflare Worker 与 D1 数据库，生成带区间、置信度和校准状态的稳定趋势分。该分数不是 Riot 官方 MMR，新玩家会显示较宽区间，随着真实样本增加逐步收窄。公网接口部署在 `lol-haidou-rating.haxiaxiaozio.workers.dev`，生产库不会保存 Riot ID 或客户端令牌。
 
 正式构建使用：
 

@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lol-haidou-rating",
+  "main": "worker/rating-worker.ts",
+  "compatibility_date": "2026-07-21",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lol-haidou-rating",
+      "database_id": "fb95ecf7-1bab-41e8-8337-9c4aa79a3ffb",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

@@ -792,7 +792,7 @@ export default function HaiDouDashboard() {
               ))}
               <p className={styles.rankCoverage}>基于 {dataset.matches.length} 场海斗的最终装备栏统计。消耗品和未完成的小件也会按客户端记录保留。</p>
             </div>
-          ) : <p className={styles.emptyState}>当前导入数据没有装备字段。使用 V11 数据助手重新同步后即可生成出装偏好。</p>}
+          ) : <p className={styles.emptyState}>当前导入数据没有装备字段。使用 V12 数据助手重新同步后即可生成出装偏好。</p>}
         </section>
 
         <section className={styles.matchesSection} aria-labelledby="matches-title">
