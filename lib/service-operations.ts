@@ -1,3 +1,5 @@
+import { rateLimitBucket, routePolicy, shouldRecordHealth } from "./service-operations-core.mjs";
+
 type ServiceEnv = {
   DB: D1Database;
   RATE_LIMIT_SALT?: string;
@@ -5,24 +7,7 @@ type ServiceEnv = {
 };
 
 export type RoutePolicy = { key: string; limit: number };
-
-export function routePolicy(pathname: string, method: string): RoutePolicy {
-  if (pathname === "/api/health") return { key: "health:get", limit: 120 };
-  if (pathname === "/api/calibration/governance") return { key: `governance:${method.toLowerCase()}`, limit: method === "POST" ? 10 : 60 };
-  if (pathname === "/api/calibration/replay") return { key: "calibration:replay", limit: 60 };
-  if (pathname === "/api/calibration") return { key: `calibration:${method.toLowerCase()}`, limit: method === "POST" ? 10 : 120 };
-  if (pathname === "/api/rating") return { key: `rating:${method.toLowerCase()}`, limit: method === "POST" ? 30 : 120 };
-  return { key: "unknown", limit: 120 };
-}
-
-const hex = (buffer: ArrayBuffer) => [...new Uint8Array(buffer)].map((value) => value.toString(16).padStart(2, "0")).join("");
-
-export async function rateLimitBucket(request: Request, route: string, salt: string, now = Date.now()) {
-  const minute = Math.floor(now / 60_000);
-  const client = request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ?? "unknown";
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}|${client}|${route}|${minute}`));
-  return `${minute}:${hex(digest).slice(0, 32)}`;
-}
+export { rateLimitBucket, routePolicy, shouldRecordHealth };
 
 export async function enforceRateLimit(env: ServiceEnv, request: Request, policy: RoutePolicy) {
   const now = Date.now();
@@ -35,10 +20,6 @@ export async function enforceRateLimit(env: ServiceEnv, request: Request, policy
     .bind(bucket).first<{ request_count: number }>();
   const count = Number(row?.request_count ?? 1);
   return { allowed: count <= policy.limit, limit: policy.limit, remaining: Math.max(0, policy.limit - count), retryAfter: 60 };
-}
-
-export function shouldRecordHealth(status: number, latencyMs: number) {
-  return status === 429 || status >= 500 || latencyMs >= 2_000;
 }
 
 export async function recordHealthEvent(env: ServiceEnv, route: string, status: number, latencyMs: number, errorCode = "") {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rateLimitBucket, routePolicy, shouldRecordHealth } from "../lib/service-operations.ts";
+import { rateLimitBucket, routePolicy, shouldRecordHealth } from "../lib/service-operations-core.mjs";
 
 test("rate limit policies protect write endpoints more strictly", () => {
   assert.equal(routePolicy("/api/rating", "POST").limit, 30);
