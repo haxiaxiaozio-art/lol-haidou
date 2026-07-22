@@ -9,6 +9,7 @@ test("desktop installer is user-scoped and registers launch integration", async 
   const installerBuilder = await readFile(new URL("../scripts/build-helper-installer.mjs", import.meta.url), "utf8");
   const installCommand = await readFile(new URL("../installer/install.cmd", import.meta.url), "utf8");
   const client = await readFile(new URL("../lib/local-client.ts", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../app/HaiDouDashboard.tsx", import.meta.url), "utf8");
 
   assert.match(install, /FolderBrowserDialog/);
   assert.match(install, /InstallLocation/);
@@ -18,6 +19,9 @@ test("desktop installer is user-scoped and registers launch integration", async 
   assert.match(install, /HKCU:\\Software\\Classes\\haidou-helper/);
   assert.match(install, /CurrentVersion\\Run/);
   assert.match(install, /CurrentVersion\\Uninstall\\HaiDouHelper/);
+  assert.match(install, /requiredInstalledFiles/);
+  assert.match(install, /start-hidden\.vbs/);
+  assert.match(install, /missingInstalledFiles\.Count -gt 0/);
   assert.doesNotMatch(install, /HKLM:/);
   assert.match(uninstall, /Software\\Classes\\haidou-helper/);
   assert.match(uninstall, /InstallLocation/);
@@ -31,4 +35,6 @@ test("desktop installer is user-scoped and registers launch integration", async 
   assert.match(client, /releases\/latest\/download\/HaiDouHelperSetup\.exe/);
   assert.match(client, /haidou-helper:\/\/start/);
   assert.match(client, /MIN_HELPER_VERSION = 17/);
+  assert.match(dashboard, /\{!needsUpdate && \(/);
+  assert.match(dashboard, /旧版助手可能缺少启动脚本/);
 });

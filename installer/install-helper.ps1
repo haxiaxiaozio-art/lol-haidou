@@ -64,6 +64,12 @@ Copy-Item -LiteralPath (Join-Path $sourceDirectory "uninstall-helper.ps1") -Dest
 Copy-Item -LiteralPath (Join-Path $sourceDirectory "README.txt") -Destination (Join-Path $installDirectory "README.txt") -Force
 Set-Content -LiteralPath (Join-Path $installDirectory ".haidou-helper-install") -Value "HaiDouHelper|$productVersion" -Encoding UTF8
 
+$requiredInstalledFiles = @("HaiDouHelper.exe", "start-hidden.vbs", "uninstall-helper.ps1", "README.txt", ".haidou-helper-install")
+$missingInstalledFiles = $requiredInstalledFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installDirectory $_) -PathType Leaf) }
+if ($missingInstalledFiles.Count -gt 0) {
+  throw "安装文件校验失败，缺少：$($missingInstalledFiles -join '、')。请重新下载安装包后再试。"
+}
+
 if ($previousInstallDirectory) { $previousInstallDirectory = [System.IO.Path]::GetFullPath($previousInstallDirectory) }
 $legacyInstallDirectory = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "HaiDouHelper"))
 $previousMarker = if ($previousInstallDirectory -and (Test-Path -LiteralPath (Join-Path $previousInstallDirectory ".haidou-helper-install") -PathType Leaf)) { Get-Content -LiteralPath (Join-Path $previousInstallDirectory ".haidou-helper-install") -Raw } else { "" }
