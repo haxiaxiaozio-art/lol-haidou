@@ -1,10 +1,23 @@
 $ErrorActionPreference = "Stop"
 
-$productVersion = "0.5.1"
+$productVersion = "0.5.2"
+$expectedHelperApiVersion = 17
 $sourceDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HaiDouHelper"
 
 Add-Type -AssemblyName System.Windows.Forms
+$installLogPath = Join-Path $env:TEMP "HaiDouHelper-install.log"
+function Write-InstallLog([string]$message) {
+  Add-Content -LiteralPath $installLogPath -Value "$(Get-Date -Format o) $message" -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+trap {
+  $failureMessage = $_.Exception.Message
+  Write-InstallLog "FAILED: $failureMessage"
+  [System.Windows.Forms.MessageBox]::Show("海斗数据助手更新失败：`n`n$failureMessage`n`n诊断日志：$installLogPath", "海斗数据助手", "OK", "Error") | Out-Null
+  exit 1
+}
+Write-InstallLog "START version=$productVersion"
+
 $folderDialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $folderDialog.Description = "请选择海斗数据助手的安装位置。程序会安装到所选目录下的 HaiDouHelper 文件夹，不需要管理员权限。"
 $folderDialog.ShowNewFolderButton = $true
@@ -35,25 +48,41 @@ if ([System.Windows.Forms.MessageBox]::Show("海斗数据助手将安装到：`n
 
 $helperPath = Join-Path $installDirectory "HaiDouHelper.exe"
 $launcherPath = Join-Path $installDirectory "start-hidden.vbs"
-$websiteUrl = "https://haxiaxiaozio-art.github.io/lol-haidou/?v=7"
+$websiteUrl = "https://haxiaxiaozio-art.github.io/lol-haidou/?v=9"
 
-function Stop-HaiDouHelper {
+function Get-RunningHaiDouHelper {
   try {
     $health = Invoke-RestMethod -Uri "http://127.0.0.1:3212/v1/health" -TimeoutSec 1
-    if ($health.service -ne "haidou-local-helper") { return }
+    if ($health.service -ne "haidou-local-helper") { return $null }
     $connection = Get-NetTCPConnection -LocalAddress "127.0.0.1" -LocalPort 3212 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -eq $connection) { return }
+    if ($null -eq $connection) { return $null }
     $process = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
-    if ($null -ne $process -and @("node", "HaiDouHelper") -contains $process.ProcessName) {
-      Stop-Process -Id $process.Id -Force -ErrorAction Stop
-      Start-Sleep -Milliseconds 500
-    }
+    if ($null -ne $process -and @("node", "HaiDouHelper") -contains $process.ProcessName) { return $process }
   } catch {
-    # No existing HaiDou helper is running.
+    return $null
   }
+  return $null
 }
 
-Stop-HaiDouHelper
+function Stop-HaiDouHelper {
+  $process = Get-RunningHaiDouHelper
+  if ($null -eq $process) { return $false }
+  Write-InstallLog "STOP oldPid=$($process.Id) path=$($process.Path)"
+  [System.Windows.Forms.MessageBox]::Show("检测到旧版海斗数据助手正在运行。安装程序将先关闭旧版，再完成更新并自动重启。", "更新海斗数据助手", "OK", "Information") | Out-Null
+  Stop-Process -Id $process.Id -Force -ErrorAction Stop
+  try { Wait-Process -Id $process.Id -Timeout 8 -ErrorAction Stop } catch {
+    if ($null -ne (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+      throw "无法关闭正在运行的旧版助手（进程 $($process.Id)）。请在任务管理器中结束 HaiDouHelper.exe 后重试。"
+    }
+  }
+  if ($null -ne (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+    throw "旧版助手仍在运行，更新已安全停止。请关闭 HaiDouHelper.exe 后重试。"
+  }
+  Write-InstallLog "STOPPED oldPid=$($process.Id)"
+  return $true
+}
+
+$stoppedOldHelper = Stop-HaiDouHelper
 New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
 $writeProbe = Join-Path $installDirectory ".write-test"
 Set-Content -LiteralPath $writeProbe -Value "ok" -Encoding Ascii
@@ -104,5 +133,21 @@ New-ItemProperty -Path $uninstallKey -Name "NoModify" -Value 1 -PropertyType DWo
 New-ItemProperty -Path $uninstallKey -Name "NoRepair" -Value 1 -PropertyType DWord -Force | Out-Null
 
 Start-Process -FilePath (Join-Path $env:SystemRoot "System32\wscript.exe") -ArgumentList ('"{0}"' -f $launcherPath) -WindowStyle Hidden
-Start-Sleep -Seconds 1
+$helperReady = $false
+for ($attempt = 0; $attempt -lt 10; $attempt++) {
+  Start-Sleep -Milliseconds 500
+  try {
+    $installedHealth = Invoke-RestMethod -Uri "http://127.0.0.1:3212/v1/health" -TimeoutSec 1
+    if ($installedHealth.service -eq "haidou-local-helper" -and [int]$installedHealth.version -ge $expectedHelperApiVersion) {
+      $helperReady = $true
+      break
+    }
+  } catch {
+    # Keep waiting for the freshly installed helper.
+  }
+}
+if (-not $helperReady) {
+  throw "新版助手已复制，但未能启动为 V$expectedHelperApiVersion。请查看安全软件拦截记录后重试。"
+}
+Write-InstallLog "SUCCESS version=$productVersion api=$expectedHelperApiVersion stoppedOld=$stoppedOldHelper path=$installDirectory"
 Start-Process $websiteUrl

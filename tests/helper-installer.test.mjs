@@ -22,6 +22,11 @@ test("desktop installer is user-scoped and registers launch integration", async 
   assert.match(install, /requiredInstalledFiles/);
   assert.match(install, /start-hidden\.vbs/);
   assert.match(install, /missingInstalledFiles\.Count -gt 0/);
+  assert.match(install, /Get-RunningHaiDouHelper/);
+  assert.match(install, /Wait-Process -Id \$process\.Id -Timeout 8/);
+  assert.match(install, /旧版助手仍在运行，更新已安全停止/);
+  assert.match(install, /installedHealth\.version -ge \$expectedHelperApiVersion/);
+  assert.match(install, /HaiDouHelper-install\.log/);
   assert.doesNotMatch(install, /HKLM:/);
   assert.match(uninstall, /Software\\Classes\\haidou-helper/);
   assert.match(uninstall, /InstallLocation/);
@@ -36,5 +41,6 @@ test("desktop installer is user-scoped and registers launch integration", async 
   assert.match(client, /haidou-helper:\/\/start/);
   assert.match(client, /MIN_HELPER_VERSION = 17/);
   assert.match(dashboard, /\{!needsUpdate && \(/);
-  assert.match(dashboard, /旧版助手可能缺少启动脚本/);
+  assert.match(dashboard, /更新助手（自动关闭旧版）/);
+  assert.match(dashboard, /安装器会关闭旧助手、完成覆盖并自动重启/);
 });

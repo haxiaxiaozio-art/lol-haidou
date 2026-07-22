@@ -451,14 +451,14 @@ export default function HaiDouDashboard() {
     return (
       <div className={styles.helperActions} data-compact={compact ? "true" : "false"}>
         <a className={styles.helperPrimary} href={HELPER_DOWNLOAD_URL}>
-          {needsUpdate ? "更新助手" : "安装助手"}
+          {needsUpdate ? "更新助手（自动关闭旧版）" : "安装助手"}
         </a>
         {!needsUpdate && (
           <a className={styles.helperSecondary} href={HELPER_LAUNCH_URL} onClick={startInstalledHelper}>
             已安装，启动助手
           </a>
         )}
-        <small>{needsUpdate ? "旧版助手可能缺少启动脚本，请直接覆盖安装最新版" : "仅支持 Windows，首次安装可能显示“未知发布者”"}</small>
+        <small>{needsUpdate ? "运行安装程序后选择目录；安装器会关闭旧助手、完成覆盖并自动重启" : "仅支持 Windows，首次安装可能显示“未知发布者”"}</small>
       </div>
     );
   };
