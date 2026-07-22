@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$productVersion = "0.5.0"
+$productVersion = "0.5.1"
 $sourceDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\HaiDouHelper"
 
