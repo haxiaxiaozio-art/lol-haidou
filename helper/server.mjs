@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isSea } from "node:sea";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { diagnoseSyncError } from "./diagnostics.mjs";
 import { ClientUnavailableError, getCurrentPlayer, syncHistory, syncPlayerHistory } from "./lcu.mjs";
 
 const HOST = "127.0.0.1";
@@ -12,7 +13,7 @@ const configuredPort = Number(process.env.HAIDOU_PORT ?? DEFAULT_PORT);
 const PORT = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
   ? configuredPort
   : DEFAULT_PORT;
-const HELPER_VERSION = 13;
+const HELPER_VERSION = 17;
 const sessions = new Map();
 const SESSION_TTL = 15 * 60 * 1000;
 const helperDirectory = isSea() ? dirname(process.execPath) : dirname(fileURLToPath(import.meta.url));
@@ -94,10 +95,18 @@ async function readBody(request) {
 }
 
 function safeError(error) {
-  if (error instanceof ClientUnavailableError) {
-    return { status: 503, code: error.code, message: error.message };
-  }
-  return { status: 502, code: "LCU_REQUEST_FAILED", message: error instanceof Error ? error.message : "读取 LOL 客户端失败" };
+  const normalizedError = error instanceof Error
+    ? error
+    : Object.assign(new Error("读取 LOL 客户端失败"), { code: "LCU_REQUEST_FAILED" });
+  const diagnostic = diagnoseSyncError(normalizedError, error instanceof ClientUnavailableError ? "client" : "lcu");
+  const status = diagnostic.category === "client-login"
+    ? 503
+    : diagnostic.category === "permission-denied"
+      ? 403
+      : diagnostic.category === "interface-timeout"
+        ? 504
+        : 502;
+  return { status, code: diagnostic.code, message: diagnostic.message, diagnostic };
 }
 
 export function createHaidouHelper() {
@@ -118,7 +127,10 @@ export function createHaidouHelper() {
         installMode: isSea() ? "desktop" : "node",
       }, origin);
     }
-    if (!allowedOrigin(origin)) return send(response, 403, { error: "ORIGIN_NOT_ALLOWED", message: "该网站未获准连接本地数据助手" }, origin);
+    if (!allowedOrigin(origin)) {
+      const error = Object.assign(new Error("该网站未获准连接本地数据助手"), { code: "ORIGIN_NOT_ALLOWED" });
+      return send(response, 403, { error: error.code, message: error.message, diagnostic: diagnoseSyncError(error, "helper") }, origin);
+    }
 
     if (request.method === "POST" && url.pathname === "/v1/session") {
       const token = randomBytes(24).toString("base64url");
@@ -126,7 +138,8 @@ export function createHaidouHelper() {
       return send(response, 200, { token, expiresInSeconds: SESSION_TTL / 1000 }, origin);
     }
     if (!validSession(request, origin)) {
-      return send(response, 401, { error: "SESSION_REQUIRED", message: "请重新连接本地数据助手" }, origin);
+      const error = Object.assign(new Error("请重新连接本地数据助手"), { code: "SESSION_REQUIRED" });
+      return send(response, 401, { error: error.code, message: error.message, diagnostic: diagnoseSyncError(error, "helper") }, origin);
     }
 
     try {
@@ -145,7 +158,7 @@ export function createHaidouHelper() {
       return send(response, 404, { error: "NOT_FOUND" }, origin);
     } catch (error) {
       const safe = safeError(error);
-      return send(response, safe.status, { error: safe.code, message: safe.message }, origin);
+      return send(response, safe.status, { error: safe.code, message: safe.message, diagnostic: safe.diagnostic }, origin);
     }
   });
 }

@@ -5,6 +5,9 @@
   "compatibility_date": "2026-05-22",
   "workers_dev": true,
   "preview_urls": false,
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

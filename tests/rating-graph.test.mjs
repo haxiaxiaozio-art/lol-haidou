@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { toUnifiedHistoryGame } from "../helper/match-model.mjs";
 import { buildRatingGraph } from "../helper/rating-network.mjs";
 
 function rawGame(id, time, winningTeam = 100) {
@@ -20,8 +21,8 @@ function rawGame(id, time, winningTeam = 100) {
 }
 
 test("rating graph contains only anonymous match relationships", () => {
-  const newer = rawGame("9002", Date.UTC(2026, 6, 2));
-  const older = rawGame("9001", Date.UTC(2026, 6, 1));
+  const newer = toUnifiedHistoryGame(rawGame("9002", Date.UTC(2026, 6, 2)), "sgp");
+  const older = toUnifiedHistoryGame(rawGame("9001", Date.UTC(2026, 6, 1)), "lcu");
   const graph = buildRatingGraph([newer, older], { puuid: "raw-puuid-0" }, "HN1", ["9001", "9002"]);
   assert.ok(graph);
   assert.equal(graph.matches.length, 2);
@@ -37,6 +38,11 @@ test("rating graph contains only anonymous match relationships", () => {
 test("rating graph rejects incomplete participant data", () => {
   const game = rawGame("9003", Date.UTC(2026, 6, 3));
   game.participantIdentities.pop();
-  const graph = buildRatingGraph([game], { puuid: "raw-puuid-0" }, "HN1", ["9003"]);
+  const graph = buildRatingGraph(
+    [toUnifiedHistoryGame(game, "logs")],
+    { puuid: "raw-puuid-0" },
+    "HN1",
+    ["9003"],
+  );
   assert.equal(graph.matches.length, 0);
 });

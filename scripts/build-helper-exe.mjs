@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { signWindowsArtifact, stripEmbeddedSignature } from "./windows-signing.mjs";
 
 const require = createRequire(import.meta.url);
 const { inject } = require("postject");
@@ -48,8 +49,10 @@ execFileSync(process.execPath, ["--experimental-sea-config", configPath], {
   stdio: "inherit",
 });
 await copyFile(process.execPath, executablePath);
+await stripEmbeddedSignature(executablePath);
 await inject(executablePath, "NODE_SEA_BLOB", await readFile(blobPath), {
   sentinelFuse,
 });
+signWindowsArtifact(executablePath);
 
 console.log(executablePath);

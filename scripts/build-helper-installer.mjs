@@ -3,6 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { signWindowsArtifact } from "./windows-signing.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "..");
@@ -27,7 +28,12 @@ const files = [
 await mkdir(payloadDirectory, { recursive: true });
 await mkdir(releaseDirectory, { recursive: true });
 for (const [source, name] of files) {
-  await copyFile(source, join(payloadDirectory, name));
+  const destination = join(payloadDirectory, name);
+  await copyFile(source, destination);
+  if (name.endsWith(".ps1")) {
+    const content = await readFile(destination, "utf8");
+    await writeFile(destination, content.startsWith("\uFEFF") ? content : `\uFEFF${content}`, "utf8");
+  }
 }
 
 const fileStrings = files.map(([, name], index) => `FILE${index}="${name}"`).join("\r\n");
@@ -41,6 +47,7 @@ try {
     stdio: "inherit",
   });
   await copyFile(stagedOutputPath, outputPath);
+  signWindowsArtifact(outputPath);
   const size = (await readFile(outputPath)).byteLength;
   if (size < 1024 * 1024) throw new Error("安装器体积异常，未包含数据助手程序");
   console.log(outputPath);

@@ -9,13 +9,14 @@ import { analyzeDataQuality, type SourceDiagnostics } from "../lib/data-quality"
 import {
   HELPER_DOWNLOAD_URL,
   HELPER_LAUNCH_URL,
+  LocalClientError,
   probeLocalConnection,
   searchLocalHistory,
   syncLocalHistory,
   type LocalConnectionProbe,
 } from "../lib/local-client";
 import { summarizePlayer } from "../lib/scoring";
-import type { CalibrationModel, LocalClientPlayer, MatchRecord, NetworkRatingEstimate, PlayerDataset, ScoredMatch } from "../lib/types";
+import type { CalibrationModel, LocalClientPlayer, MatchRecord, NetworkRatingEstimate, PlayerDataset, ScoredMatch, SyncDiagnostic } from "../lib/types";
 import styles from "./page.module.css";
 
 type MatchFilter = "全部" | "胜利" | "失败";
@@ -69,6 +70,74 @@ const calibrationStatusLabel = {
   stable: "稳定",
 } as const;
 
+const calibrationChannelLabel = {
+  baseline: "固定基线",
+  canary: "灰度验证",
+  stable: "正式生效",
+  rollback: "已触发回滚",
+} as const;
+
+const DIAGNOSTIC_CATEGORIES: Array<{ key: SyncDiagnostic["category"]; label: string; clear: string }> = [
+  { key: "client-login", label: "客户端登录", clear: "已识别客户端登录状态" },
+  { key: "region-unavailable", label: "大区可用性", clear: "当前大区映射可用" },
+  { key: "interface-timeout", label: "接口响应", clear: "接口未出现超时" },
+  { key: "permission-denied", label: "连接权限", clear: "本机连接权限正常" },
+  { key: "field-missing", label: "字段完整性", clear: "评分所需字段可用" },
+];
+
+const DIAGNOSTIC_SOURCE_LABEL: Record<SyncDiagnostic["source"], string> = {
+  helper: "数据助手",
+  client: "LOL 客户端",
+  sgp: "SGP",
+  lcu: "LCU",
+  logs: "本机日志",
+  model: "统一模型",
+};
+
+function SyncDiagnosticCenter({
+  diagnostics,
+  checking,
+  onRetry,
+}: {
+  diagnostics: SyncDiagnostic[];
+  checking: boolean;
+  onRetry: () => void;
+}) {
+  const activeCount = diagnostics.length;
+  return (
+    <section className={styles.diagnosticCenter} aria-labelledby="diagnostic-title">
+      <div className={styles.diagnosticHeader}>
+        <div>
+          <span>SYNC DIAGNOSTICS</span>
+          <h2 id="diagnostic-title">同步失败诊断中心</h2>
+          <p>{checking ? "正在重新检查本机链路" : activeCount ? `发现 ${activeCount} 条诊断，按类别给出处理建议` : "五项同步检查均未发现异常"}</p>
+        </div>
+        <button type="button" onClick={onRetry} disabled={checking}>{checking ? "正在检测" : "重新检测"}</button>
+      </div>
+      <div className={styles.diagnosticRows} role="status" aria-live="polite">
+        {DIAGNOSTIC_CATEGORIES.map((category, index) => {
+          const diagnostic = [...diagnostics].reverse().find((item) => item.category === category.key);
+          const state = checking ? "checking" : diagnostic?.severity ?? "clear";
+          return (
+            <article key={category.key} data-state={state}>
+              <span className={styles.diagnosticIndex}>{String(index + 1).padStart(2, "0")}</span>
+              <div className={styles.diagnosticIdentity}>
+                <strong>{category.label}</strong>
+                <small>{diagnostic ? `${DIAGNOSTIC_SOURCE_LABEL[diagnostic.source]} · ${diagnostic.code}` : checking ? "等待检测结果" : category.clear}</small>
+              </div>
+              <div className={styles.diagnosticDetail}>
+                <strong>{diagnostic?.title ?? (checking ? "检测中" : "正常")}</strong>
+                <p>{diagnostic?.message ?? (checking ? "正在确认此项状态。" : category.clear)}</p>
+                {diagnostic && <small>{diagnostic.suggestion}</small>}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 const resultLabel = (score: number, highlightThreshold = 88) => {
   if (score >= highlightThreshold) return "高光";
   if (score >= 74) return "出色";
@@ -118,6 +187,14 @@ function downloadBlob(content: string, type: string, fileName: string) {
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function withScoringSnapshot(dataset: PlayerDataset, model: CalibrationModel | null): PlayerDataset {
+  if (!model) return dataset;
+  return {
+    ...dataset,
+    scoringSnapshot: { modelVersion: model.version, scoredAt: new Date().toISOString(), model },
+  };
 }
 
 function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightThreshold: number }) {
@@ -197,6 +274,7 @@ export default function HaiDouDashboard() {
   const [lookupError, setLookupError] = useState("");
   const [localPlayer, setLocalPlayer] = useState<LocalClientPlayer | null>(null);
   const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
+  const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostic[]>([]);
   const [importMessage, setImportMessage] = useState("尚未导入文件，当前展示完整演示数据。");
   const [importError, setImportError] = useState("");
   const [networkRating, setNetworkRating] = useState<NetworkRatingEstimate | null>(null);
@@ -213,6 +291,14 @@ export default function HaiDouDashboard() {
     () => analyzeDataQuality(dataset, sourceDiagnostics, calibrationModel),
     [dataset, sourceDiagnostics, calibrationModel],
   );
+  const visibleDiagnostics = useMemo(() => {
+    const byCategory = new Map<SyncDiagnostic["category"], SyncDiagnostic>();
+    for (const diagnostic of syncDiagnostics) byCategory.set(diagnostic.category, diagnostic);
+    if (localConnection.status !== "connected" && localConnection.diagnostic) {
+      byCategory.set(localConnection.diagnostic.category, localConnection.diagnostic);
+    }
+    return [...byCategory.values()];
+  }, [localConnection, syncDiagnostics]);
   const isFlowBusy = ["resolving", "syncing", "scoring"].includes(flowStatus);
   const activeStep = flowStatus === "ready" ? 3 : flowStatus === "connected" || isFlowBusy ? 2 : 1;
 
@@ -260,6 +346,10 @@ export default function HaiDouDashboard() {
     try {
       const imported = await importDataset(file);
       setDataset(imported);
+      if (imported.scoringSnapshot) {
+        setCalibrationModel(imported.scoringSnapshot.model);
+        setCalibrationError("");
+      }
       setNetworkRating(null);
       setSourceDiagnostics({ requestedCount: null, scannedCount: imported.matches.length, haidouCount: imported.matches.length });
       setFilter("全部");
@@ -373,6 +463,7 @@ export default function HaiDouDashboard() {
 
   const runLocalSync = async () => {
     setLookupError("");
+    setSyncDiagnostics([]);
     setFlowStatus("syncing");
     setFlowDetail(`正在读取最近 ${matchCount} 场战绩并识别海斗对局`);
     try {
@@ -380,23 +471,41 @@ export default function HaiDouDashboard() {
       setFlowStatus("scoring");
       setFlowDetail(`已找到 ${result.haidouCount} 场海斗对局，正在计算评分`);
       await wait(160);
-      setDataset(result.dataset);
+      setDataset(withScoringSnapshot(result.dataset, result.calibrationModel));
       setNetworkRating(result.networkRating);
       setCalibrationModel(result.calibrationModel);
       setCalibrationError(result.calibrationError);
-      setSourceDiagnostics({ requestedCount: matchCount, scannedCount: result.scannedCount, haidouCount: result.haidouCount });
+      setSourceDiagnostics({
+        requestedCount: matchCount,
+        scannedCount: result.scannedCount,
+        haidouCount: result.haidouCount,
+        historySources: result.historySources,
+        sourceCounts: result.sourceCounts,
+        fallbackReasons: result.fallbackReasons,
+      });
+      setSyncDiagnostics(result.diagnostics);
       setLocalPlayer(result.dataset.player);
       setGameName(result.dataset.player.gameName);
       setTagLine(result.dataset.player.tag);
       setRegion(result.dataset.player.region);
       setFilter("全部");
       setFlowStatus("ready");
-      setFlowDetail(`读取 ${result.scannedCount} 场，导入 ${result.haidouCount} 场海斗${result.calibrationAccepted ? `，新增 ${result.calibrationAccepted} 份匿名校准样本` : ""}`);
+      setFlowDetail(`读取 ${result.scannedCount} 场，导入 ${result.haidouCount} 场海斗${result.calibrationAccepted ? `，新增 ${result.calibrationAccepted} 份匿名校准样本` : ""}${result.calibrationQuarantined ? `，隔离 ${result.calibrationQuarantined} 份异常样本` : ""}`);
       scrollToReport();
     } catch (error) {
       setFlowStatus(localPlayer ? "connected" : "idle");
       setFlowDetail("读取未完成，页面保留上一次可用战报");
       setLookupError(error instanceof Error ? error.message : "读取 LOL 战绩失败");
+      setSyncDiagnostics(error instanceof LocalClientError && error.diagnostic ? [error.diagnostic] : [{
+        category: "interface-timeout",
+        code: "SYNC_REQUEST_FAILED",
+        source: "helper",
+        severity: "error",
+        title: "接口超时或暂时不可用",
+        message: error instanceof Error ? error.message : "读取 LOL 战绩失败",
+        suggestion: "保持客户端在线后重试；连续失败时重启客户端和数据助手。",
+        retryable: true,
+      }]);
     }
   };
 
@@ -418,6 +527,7 @@ export default function HaiDouDashboard() {
     }
 
     setLookupError("");
+    setSyncDiagnostics([]);
     setFlowStatus("resolving");
     setFlowDetail(`正在 ${localPlayer.region} 查找 ${normalizedName}#${normalizedTag}`);
     try {
@@ -432,19 +542,37 @@ export default function HaiDouDashboard() {
       setFlowStatus("scoring");
       setFlowDetail(`已找到 ${result.haidouCount} 场海斗对局，正在计算评分`);
       await wait(160);
-      setDataset(result.dataset);
+      setDataset(withScoringSnapshot(result.dataset, result.calibrationModel));
       setNetworkRating(result.networkRating);
       setCalibrationModel(result.calibrationModel);
       setCalibrationError(result.calibrationError);
-      setSourceDiagnostics({ requestedCount: matchCount, scannedCount: result.scannedCount, haidouCount: result.haidouCount });
+      setSourceDiagnostics({
+        requestedCount: matchCount,
+        scannedCount: result.scannedCount,
+        haidouCount: result.haidouCount,
+        historySources: result.historySources,
+        sourceCounts: result.sourceCounts,
+        fallbackReasons: result.fallbackReasons,
+      });
+      setSyncDiagnostics(result.diagnostics);
       setFilter("全部");
       setFlowStatus("ready");
-      setFlowDetail(`读取 ${result.scannedCount} 场，导入 ${result.haidouCount} 场海斗${result.calibrationAccepted ? `，新增 ${result.calibrationAccepted} 份匿名校准样本` : ""}`);
+      setFlowDetail(`读取 ${result.scannedCount} 场，导入 ${result.haidouCount} 场海斗${result.calibrationAccepted ? `，新增 ${result.calibrationAccepted} 份匿名校准样本` : ""}${result.calibrationQuarantined ? `，隔离 ${result.calibrationQuarantined} 份异常样本` : ""}`);
       scrollToReport();
     } catch (error) {
       setFlowStatus("idle");
       setFlowDetail("检索未完成，页面保留上一份可用战报");
       setLookupError(error instanceof Error ? error.message : "无法检索该玩家");
+      setSyncDiagnostics(error instanceof LocalClientError && error.diagnostic ? [error.diagnostic] : [{
+        category: "interface-timeout",
+        code: "SEARCH_REQUEST_FAILED",
+        source: "helper",
+        severity: "error",
+        title: "接口超时或暂时不可用",
+        message: error instanceof Error ? error.message : "无法检索该玩家",
+        suggestion: "确认客户端在线且玩家属于当前大区，然后重新检索。",
+        retryable: true,
+      }]);
     }
   };
 
@@ -515,6 +643,16 @@ export default function HaiDouDashboard() {
     }
     const rows = [CSV_HEADERS, ...sampleMatches.map(matchToCsvRow)];
     downloadBlob(`\uFEFF${rows.map((row) => row.map(csvEscape).join(",")).join("\n")}`, "text/csv;charset=utf-8", "海斗导入模板.csv");
+  };
+
+  const exportReplayReport = () => {
+    const replayDataset = withScoringSnapshot(dataset, calibrationModel);
+    const safeName = dataset.player.gameName.replace(/[\\/:*?"<>|]/g, "_");
+    downloadBlob(
+      JSON.stringify(replayDataset, null, 2),
+      "application/json;charset=utf-8",
+      `${safeName}-海斗历史评分报告.json`,
+    );
   };
 
   const visibleMatches = summary.scoredMatches.filter((item) =>
@@ -713,6 +851,14 @@ export default function HaiDouDashboard() {
             )}
           </div>
 
+          {(sourceMode === "search" || sourceMode === "local") && (
+            <SyncDiagnosticCenter
+              diagnostics={visibleDiagnostics}
+              checking={localConnection.status === "checking" || isFlowBusy}
+              onRetry={() => void connectLocalClient()}
+            />
+          )}
+
           <div className={styles.flowFooter} aria-live="polite">
             <span className={styles.statusLine}><i data-busy={isFlowBusy} />{FLOW_STATUS_COPY[flowStatus]}</span>
             <span>{flowDetail}</span>
@@ -803,7 +949,37 @@ export default function HaiDouDashboard() {
               <div><dt>副职业奖励</dt><dd>{Math.round((calibrationModel?.secondaryBonusWeight ?? 0.4) * 100)}%</dd></div>
               <div><dt>死亡惩罚系数</dt><dd>{(calibrationModel?.deathPenaltyScale ?? 1).toFixed(2)}</dd></div>
             </dl>
-            <p className={styles.calibrationPrivacy}>职业少于 {calibrationModel?.minimumRoleSamples ?? 100} 局时仅显示收集进度，不改该职业基线。页面会显示本次使用的模型版本，网络不可用时回退固定基线。</p>
+            <div className={styles.replayActions}>
+              <div>
+                <span>历史重放</span>
+                <strong>{dataset.scoringSnapshot ? `已锁定 ${dataset.scoringSnapshot.modelVersion}` : `当前 ${calibrationModel?.version ?? "rules-2026.07"}`}</strong>
+                <small>{dataset.scoringSnapshot ? `导入报告按 ${new Date(dataset.scoringSnapshot.scoredAt).toLocaleString("zh-CN")} 的模型重算` : "导出后会把本次评分模型一并保存，未来打开不会随新模型漂移"}</small>
+              </div>
+              <button className={styles.replayButton} type="button" onClick={exportReplayReport}>导出可重放报告</button>
+            </div>
+            <div className={styles.calibrationGovernance} aria-label="模型版本治理状态">
+              <div>
+                <span>当前通道</span>
+                <strong data-tone={calibrationModel?.governance?.channel ?? "baseline"}>{calibrationModel?.governance ? calibrationChannelLabel[calibrationModel.governance.channel] : "固定基线"}</strong>
+                <small>{calibrationModel?.governance?.candidateVersion ? `候选 ${calibrationModel.governance.candidateVersion}` : "当前没有待发布候选"}</small>
+              </div>
+              <div>
+                <span>灰度范围</span>
+                <strong>{calibrationModel?.governance?.rolloutPercentage ?? 0}%</strong>
+                <small>{calibrationModel?.governance?.cohortBucket === null || calibrationModel?.governance?.cohortBucket === undefined ? "公共页面固定使用正式版本" : `本机匿名分桶 ${calibrationModel.governance.cohortBucket}`}</small>
+              </div>
+              <div>
+                <span>异常隔离</span>
+                <strong>{calibrationModel?.governance?.anomalyWindow.quarantined ?? "未启用"}</strong>
+                <small>{calibrationModel?.governance ? `近 ${calibrationModel.governance.anomalyWindow.windowDays} 天隔离率 ${calibrationModel.governance.anomalyWindow.quarantineRate}%` : "服务端升级后开始统计"}</small>
+              </div>
+              <div>
+                <span>回滚保护</span>
+                <strong>{calibrationModel?.governance?.rollbackVersion ? "已回滚" : calibrationModel?.governance ? "已就绪" : "固定基线"}</strong>
+                <small>{calibrationModel?.governance?.rollbackVersion ? `拦截 ${calibrationModel.governance.rollbackVersion}` : calibrationModel?.governance ? `质量分 ${calibrationModel.governance.qualityScore} · 最大漂移 ${Math.round(calibrationModel.governance.maxExpectedDrift * 100)}%` : "模型异常时不替换本地规则"}</small>
+              </div>
+            </div>
+            <p className={styles.calibrationPrivacy}>职业少于 {calibrationModel?.minimumRoleSamples ?? 100} 局时仅显示收集进度，不改该职业基线。新版本先进入匿名灰度分桶，异常样本或参数漂移越界时回滚到最近稳定版本。</p>
           </div>
         </section>
 

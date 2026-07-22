@@ -35,6 +35,11 @@ test("renders the HaiDou dashboard", async () => {
   assert.match(html, /数据质量与真实样本校准/);
   assert.match(html, /质量只说明数据是否足够完整/);
   assert.match(html, /副职业奖励/);
+  assert.match(html, /模型版本治理状态/);
+  assert.match(html, /异常隔离/);
+  assert.match(html, /灰度范围/);
+  assert.match(html, /历史重放/);
+  assert.match(html, /导出可重放报告/);
   assert.match(html, /战绩扫描上限/);
   assert.match(html, /前 10 名覆盖/);
   assert.match(html, /最爱出装/);
@@ -53,4 +58,7 @@ test("renders local privacy guidance", async () => {
   assert.match(html, /单向哈希处理/);
   assert.match(html, /默认关闭/);
   assert.match(html, /检索其他玩家时不会提交校准样本/);
+  assert.match(html, /异常样本/);
+  assert.match(html, /保留 365 天/);
+  assert.match(html, /服务健康记录/);
 });

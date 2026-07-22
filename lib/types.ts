@@ -54,9 +54,25 @@ export type PlayerDataset = {
     updatedAt: string;
   };
   matches: MatchRecord[];
+  scoringSnapshot?: {
+    modelVersion: string;
+    scoredAt: string;
+    model: CalibrationModel;
+  };
 };
 
 export type LocalClientPlayer = PlayerDataset["player"];
+
+export type SyncDiagnostic = {
+  category: "client-login" | "region-unavailable" | "interface-timeout" | "permission-denied" | "field-missing";
+  code: string;
+  source: "helper" | "client" | "sgp" | "lcu" | "logs" | "model";
+  severity: "warning" | "error";
+  title: string;
+  message: string;
+  suggestion: string;
+  retryable: boolean;
+};
 
 export type NetworkRatingEstimate = {
   rating: number;
@@ -70,6 +86,7 @@ export type NetworkRatingEstimate = {
 
 export type CalibrationModel = {
   version: string;
+  patch?: string;
   generatedAt: string;
   status: "collecting" | "calibrating" | "stable";
   totalSamples: number;
@@ -83,16 +100,39 @@ export type CalibrationModel = {
     confidence: number;
     expected: number[];
   }>;
+  governance?: {
+    policyVersion: string;
+    patch: string;
+    activeVersion: string;
+    candidateVersion: string | null;
+    rollbackVersion: string | null;
+    channel: "baseline" | "canary" | "stable" | "rollback";
+    rolloutPercentage: number;
+    cohortBucket: number | null;
+    qualityScore: number;
+    maxExpectedDrift: number;
+    anomalyWindow: {
+      accepted: number;
+      quarantined: number;
+      quarantineRate: number;
+      windowDays: number;
+    };
+  };
 };
 
 export type LocalClientSyncResult = {
   dataset: PlayerDataset;
   scannedCount: number;
   haidouCount: number;
+  historySources: Array<"sgp" | "lcu" | "logs">;
+  sourceCounts: { sgp: number; lcu: number; logs: number };
+  fallbackReasons: string[];
+  diagnostics: SyncDiagnostic[];
   networkRating: NetworkRatingEstimate | null;
   networkRatingError: string;
   calibrationModel: CalibrationModel | null;
   calibrationAccepted: number;
+  calibrationQuarantined: number;
   calibrationError: string;
 };
 

@@ -3,18 +3,30 @@ import { readdir, readFile } from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
+import { diagnoseSyncError, missingFieldDiagnostic } from "./diagnostics.mjs";
 import { buildPlayerDataset, extractGames, normalizeHistory } from "./normalize.mjs";
+import { toUnifiedHistoryGames } from "./match-model.mjs";
 import { buildRatingGraph, submitRatingGraph } from "./rating-network.mjs";
 import { syncCalibration } from "./calibration-network.mjs";
+import { querySgpHistory } from "./sgp.mjs";
 
 const execFileAsync = promisify(execFile);
 const POWER_SHELL = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
 
 export class ClientUnavailableError extends Error {
-  constructor(message = "未检测到已登录的 LOL 客户端") {
+  constructor(message = "未检测到已登录的 LOL 客户端", code = "CLIENT_NOT_LOGGED") {
     super(message);
     this.name = "ClientUnavailableError";
-    this.code = "CLIENT_UNAVAILABLE";
+    this.code = code;
+  }
+}
+
+export class LcuRequestError extends Error {
+  constructor(message, code = "LCU_REQUEST_FAILED", status = 0) {
+    super(message);
+    this.name = "LcuRequestError";
+    this.code = code;
+    this.status = status;
   }
 }
 
@@ -106,15 +118,15 @@ async function leagueClientLogCredentials(executablePath) {
 
 export async function detectLeagueClient() {
   const process = await processInfo();
-  if (!process) throw new ClientUnavailableError("未检测到 League 客户端，请先启动 LOL 并完成登录");
+  if (!process) throw new ClientUnavailableError("未检测到 League 客户端，请先启动 LOL 并完成登录", "CLIENT_NOT_LOGGED");
   const credentials = parseCommandLine(process.CommandLine)
     ?? await lockfileCredentials(process.ExecutablePath)
     ?? await leagueClientLogCredentials(process.ExecutablePath);
-  if (!credentials) throw new ClientUnavailableError("LOL 客户端已启动，但尚未准备好本地数据接口");
+  if (!credentials) throw new ClientUnavailableError("LOL 客户端已启动，但尚未准备好本地数据接口", "CLIENT_NOT_READY");
   return credentials;
 }
 
-function lcuRequest(credentials, requestPath, options = {}) {
+export function lcuRequest(credentials, requestPath, options = {}) {
   const method = options.method ?? "GET";
   const requestBody = options.body === undefined ? null : JSON.stringify(options.body);
   return new Promise((resolve, reject) => {
@@ -139,7 +151,7 @@ function lcuRequest(credentials, requestPath, options = {}) {
       response.on("data", (chunk) => {
         size += chunk.length;
         if (size > 20 * 1024 * 1024) {
-          request.destroy(new Error("LOL 客户端返回的数据过大"));
+          request.destroy(new LcuRequestError("LOL 客户端返回的数据过大", "LCU_FIELD_MISSING"));
           return;
         }
         chunks.push(chunk);
@@ -147,18 +159,26 @@ function lcuRequest(credentials, requestPath, options = {}) {
       response.on("end", () => {
         const body = Buffer.concat(chunks).toString("utf8");
         if ((response.statusCode ?? 500) >= 400) {
-          reject(new Error(`LOL 客户端接口返回 ${response.statusCode}`));
+          const status = response.statusCode ?? 500;
+          const code = status === 401 || status === 403
+            ? `LCU_HTTP_${status}`
+            : status === 404
+              ? "LCU_ENDPOINT_UNAVAILABLE"
+              : "LCU_REQUEST_FAILED";
+          reject(new LcuRequestError(`LOL 客户端接口返回 ${status}`, code, status));
           return;
         }
         try {
           resolve(body ? JSON.parse(body) : null);
         } catch {
-          reject(new Error("无法解析 LOL 客户端返回的数据"));
+          reject(new LcuRequestError("无法解析 LOL 客户端返回的数据", "LCU_INVALID_RESPONSE"));
         }
       });
     });
-    request.on("timeout", () => request.destroy(new Error("连接 LOL 客户端超时")));
-    request.on("error", reject);
+    request.on("timeout", () => request.destroy(new LcuRequestError("连接 LOL 客户端超时", "LCU_TIMEOUT")));
+    request.on("error", (error) => reject(error instanceof LcuRequestError
+      ? error
+      : new LcuRequestError("无法连接 LOL 客户端接口", "LCU_NETWORK_ERROR")));
     if (requestBody) request.write(requestBody);
     request.end();
   });
@@ -257,12 +277,18 @@ async function historicalGameIds(executablePath, platformId) {
 
 export async function getCurrentPlayer() {
   const credentials = await detectLeagueClient();
-  const [player, apiRegion] = await Promise.all([
-    lcuRequest(credentials, "/lol-summoner/v1/current-summoner"),
-    optionalRequest(credentials, "/riotclient/region-locale", {}),
-  ]);
+  let player;
+  try {
+    player = await lcuRequest(credentials, "/lol-summoner/v1/current-summoner");
+  } catch (error) {
+    if (error?.status === 404) {
+      throw new ClientUnavailableError("LOL 客户端已启动，但当前玩家尚未登录", "CLIENT_NOT_LOGGED");
+    }
+    throw error;
+  }
+  const apiRegion = await optionalRequest(credentials, "/riotclient/region-locale", {});
   if (!player?.puuid && !player?.accountId && !player?.summonerId) {
-    throw new ClientUnavailableError("LOL 客户端已启动，但当前玩家尚未登录");
+    throw new ClientUnavailableError("LOL 客户端已启动，但当前玩家尚未登录", "CLIENT_NOT_LOGGED");
   }
   const region = credentials.platformId
     ? { ...apiRegion, webRegion: credentials.platformId }
@@ -344,11 +370,9 @@ const gameTimestamp = (game) => {
   return Number.isFinite(parsed) ? parsed : Number(game?.gameId ?? 0);
 };
 
-async function historyGames(credentials, player, count) {
-  const games = await recentHistoryGames(credentials, player, count);
-  if (games.length >= count) return games.slice(0, count);
-
-  const seen = new Set(games.map((game) => String(game?.gameId ?? game?.id ?? "")));
+async function historicalHistoryGames(credentials, player, count, excludedIds = []) {
+  const games = [];
+  const seen = new Set(excludedIds.map(String));
   const candidateIds = (await historicalGameIds(null, credentials.platformId))
     .filter((id) => !seen.has(id))
     .slice(0, 600);
@@ -371,6 +395,80 @@ async function historyGames(credentials, player, count) {
     .slice(0, count);
 }
 
+const sourceFailureMessage = (source, error) => {
+  const message = error instanceof Error ? error.message : "暂时不可用";
+  return `${source} 读取失败：${message}`;
+};
+
+export async function historyGames(credentials, player, region, count, readers = {}) {
+  const games = [];
+  const seen = new Set();
+  const historySources = [];
+  const attemptedSources = [];
+  const fallbackReasons = [];
+  const diagnostics = [];
+  const sourceCounts = { sgp: 0, lcu: 0, logs: 0 };
+  const appendGames = (source, incoming) => {
+    let added = 0;
+    const rawGames = Array.isArray(incoming) ? incoming : [];
+    const unifiedGames = toUnifiedHistoryGames(rawGames, source);
+    if (rawGames.length > 0 && unifiedGames.length === 0) {
+      diagnostics.push(missingFieldDiagnostic(source, `${source.toUpperCase()} 返回了战绩，但缺少比赛编号或玩家结构。`));
+    }
+    for (const game of unifiedGames) {
+      const id = String(game?.gameId ?? game?.id ?? "");
+      if (!id || seen.has(id) || games.length >= count) continue;
+      seen.add(id);
+      games.push(game);
+      added += 1;
+    }
+    sourceCounts[source] += added;
+    if (added > 0 && !historySources.includes(source)) historySources.push(source);
+  };
+  const runSource = async (source, read) => {
+    attemptedSources.push(source);
+    try {
+      appendGames(source, await read());
+    } catch (error) {
+      fallbackReasons.push(sourceFailureMessage(source === "sgp" ? "SGP" : source === "lcu" ? "LCU" : "本机日志", error));
+      diagnostics.push(diagnoseSyncError(error, source, "warning"));
+    }
+  };
+
+  const sgpReader = readers.sgp ?? (() => querySgpHistory({
+    credentials,
+    player,
+    region,
+    count,
+    lcuRequest,
+  }));
+  await runSource("sgp", sgpReader);
+
+  if (games.length < count) {
+    const lcuReader = readers.lcu ?? (() => recentHistoryGames(credentials, player, count));
+    await runSource("lcu", lcuReader);
+  }
+
+  if (games.length < count) {
+    const remaining = count - games.length;
+    const logReader = readers.logs ?? (() => historicalHistoryGames(credentials, player, remaining, [...seen]));
+    await runSource("logs", logReader);
+  }
+
+  return {
+    games: games
+      .sort((left, right) => gameTimestamp(right) - gameTimestamp(left))
+      .slice(0, count),
+    historySources: historySources.length ? historySources : attemptedSources,
+    sourceCounts,
+    fallbackReasons,
+    diagnostics: diagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      severity: games.length > 0 ? "warning" : "error",
+    })),
+  };
+}
+
 function validatedMatchCount(requestedCount) {
   const allowedCounts = new Set([20, 40, 100, 200]);
   const count = Number(requestedCount);
@@ -379,22 +477,31 @@ function validatedMatchCount(requestedCount) {
 }
 
 async function buildHistoryResult(credentials, player, region, count, contributeCalibration = false) {
-  const [scanned, championPayload, augmentPayload, itemPayload] = await Promise.all([
-    historyGames(credentials, player, count),
+  const [history, championPayload, augmentPayload, itemPayload] = await Promise.all([
+    historyGames(credentials, player, region, count),
     optionalRequest(credentials, "/lol-game-data/assets/v1/champion-summary.json", []),
     optionalRequest(credentials, "/lol-game-data/assets/v1/cherry-augments.json", []),
     optionalRequest(credentials, "/lol-game-data/assets/v1/items.json", []),
   ]);
+  const scanned = history.games;
+  const champions = championMap(championPayload);
+  const augmentNames = augmentMap(augmentPayload);
+  const itemNames = itemMap(itemPayload);
+  const diagnostics = [...history.diagnostics];
+  if (scanned.length > 0 && champions.size === 0) diagnostics.push(missingFieldDiagnostic("model", "英雄主分类字段不可用，职业识别可能回退到对局位置。"));
+  if (scanned.length > 0 && augmentNames.size === 0) diagnostics.push(missingFieldDiagnostic("model", "海克斯名称表不可用，将保留数字编号。"));
+  if (scanned.length > 0 && itemNames.size === 0) diagnostics.push(missingFieldDiagnostic("model", "装备名称表不可用，将保留数字编号。"));
   const matches = normalizeHistory([scanned], {
     player,
-    champions: championMap(championPayload),
-    augmentNames: augmentMap(augmentPayload),
-    itemNames: itemMap(itemPayload),
+    champions,
+    augmentNames,
+    itemNames,
   });
   let networkRating = null;
   let networkRatingError = "";
   let calibrationModel = null;
   let calibrationAccepted = 0;
+  let calibrationQuarantined = 0;
   let calibrationError = "";
   const regionCode = credentials.platformId ?? region?.webRegion ?? region?.region;
   try {
@@ -407,6 +514,7 @@ async function buildHistoryResult(credentials, player, region, count, contribute
     const calibration = await syncCalibration(matches, player, regionCode, contributeCalibration);
     calibrationModel = calibration.model;
     calibrationAccepted = calibration.accepted;
+    calibrationQuarantined = Number(calibration.quarantined ?? 0);
   } catch (error) {
     calibrationError = error instanceof Error ? error.message : "真实样本校准服务暂时不可用";
   }
@@ -414,10 +522,15 @@ async function buildHistoryResult(credentials, player, region, count, contribute
     dataset: buildPlayerDataset({ player, region, matches }),
     scannedCount: scanned.length,
     haidouCount: matches.length,
+    historySources: history.historySources,
+    sourceCounts: history.sourceCounts,
+    fallbackReasons: history.fallbackReasons,
+    diagnostics,
     networkRating,
     networkRatingError,
     calibrationModel,
     calibrationAccepted,
+    calibrationQuarantined,
     calibrationError,
   };
 }

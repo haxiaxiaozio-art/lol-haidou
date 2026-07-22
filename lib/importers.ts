@@ -1,4 +1,5 @@
 import { ROLES, type MatchRecord, type PlayerDataset, type Role } from "./types";
+import { normalizeScoringSnapshot } from "./replay-report.mjs";
 
 const REQUIRED_HEADERS = [
   "match_id", "played_at", "patch", "champion", "role", "win", "duration_minutes",
@@ -119,6 +120,7 @@ const parseJson = (text: string): PlayerDataset => {
       updatedAt: new Date().toISOString(),
     },
     matches: rawMatches.map((match, index) => normalizeMatch(match as Record<string, unknown>, index)),
+    scoringSnapshot: normalizeScoringSnapshot(container.scoringSnapshot) as PlayerDataset["scoringSnapshot"],
   };
 };
 

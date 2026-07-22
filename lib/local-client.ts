@@ -1,7 +1,7 @@
-import type { LocalClientPlayer, LocalClientSyncResult } from "./types";
+import type { LocalClientPlayer, LocalClientSyncResult, SyncDiagnostic } from "./types";
 
 const HELPER_URL = "http://127.0.0.1:3212";
-export const MIN_HELPER_VERSION = 13;
+export const MIN_HELPER_VERSION = 17;
 export const HELPER_DOWNLOAD_URL = "https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe";
 export const HELPER_LAUNCH_URL = "haidou-helper://start";
 let sessionToken = "";
@@ -15,12 +15,30 @@ function helperOfflineMessage() {
 
 export class LocalClientError extends Error {
   code: string;
+  diagnostic?: SyncDiagnostic;
 
-  constructor(message: string, code = "LOCAL_HELPER_ERROR") {
+  constructor(message: string, code = "LOCAL_HELPER_ERROR", diagnostic?: SyncDiagnostic) {
     super(message);
     this.name = "LocalClientError";
     this.code = code;
+    this.diagnostic = diagnostic;
   }
+}
+
+function browserDiagnostic(
+  category: SyncDiagnostic["category"],
+  code: string,
+  message: string,
+  suggestion: string,
+): SyncDiagnostic {
+  const titles: Record<SyncDiagnostic["category"], string> = {
+    "client-login": "客户端未登录",
+    "region-unavailable": "当前大区不可用",
+    "interface-timeout": "接口超时或暂时不可用",
+    "permission-denied": "连接权限不足",
+    "field-missing": "战绩字段缺失",
+  };
+  return { category, code, source: "helper", severity: "error", title: titles[category], message, suggestion, retryable: category !== "field-missing" };
 }
 
 export type LocalConnectionProbe = {
@@ -28,18 +46,19 @@ export type LocalConnectionProbe = {
   message: string;
   code?: string;
   helperVersion?: number;
+  diagnostic?: SyncDiagnostic;
   player: LocalClientPlayer | null;
 };
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  let body: { message?: string; error?: string } & Partial<T> = {};
+  let body: { message?: string; error?: string; diagnostic?: SyncDiagnostic } & Partial<T> = {};
   try {
     body = await response.json();
   } catch {
     throw new LocalClientError("本地数据助手返回了无法识别的内容");
   }
   if (!response.ok) {
-    throw new LocalClientError(body.message ?? "本地数据助手连接失败", body.error);
+    throw new LocalClientError(body.message ?? "本地数据助手连接失败", body.error, body.diagnostic);
   }
   return body as T;
 }
@@ -49,7 +68,8 @@ async function createSession() {
   try {
     response = await fetch(`${HELPER_URL}/v1/session`, { method: "POST", cache: "no-store" });
   } catch {
-    throw new LocalClientError(helperOfflineMessage(), "HELPER_OFFLINE");
+    const message = helperOfflineMessage();
+    throw new LocalClientError(message, "HELPER_OFFLINE", browserDiagnostic("permission-denied", "HELPER_OFFLINE", message, "安装并启动最新版数据助手，然后允许浏览器访问本机网络。"));
   }
   const body = await parseResponse<{ token: string }>(response);
   sessionToken = body.token;
@@ -70,7 +90,8 @@ async function helperRequest<T>(path: string, init: RequestInit = {}, retry = tr
     });
   } catch {
     sessionToken = "";
-    throw new LocalClientError(helperOfflineMessage(), "HELPER_OFFLINE");
+    const message = helperOfflineMessage();
+    throw new LocalClientError(message, "HELPER_OFFLINE", browserDiagnostic("permission-denied", "HELPER_OFFLINE", message, "安装并启动最新版数据助手，然后允许浏览器访问本机网络。"));
   }
   if (response.status === 401 && retry) {
     sessionToken = "";
@@ -95,21 +116,25 @@ export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
     helperVersion = Number(body.version ?? 0);
   } catch {
     sessionToken = "";
+    const message = helperOfflineMessage();
     return {
       status: "helper-offline",
-      message: helperOfflineMessage(),
+      message,
       code: "HELPER_OFFLINE",
+      diagnostic: browserDiagnostic("permission-denied", "HELPER_OFFLINE", message, "安装并启动最新版数据助手，然后允许浏览器访问本机网络。"),
       player: null,
     };
   }
 
   if (helperVersion < MIN_HELPER_VERSION) {
     sessionToken = "";
+    const message = `数据助手版本过旧（当前 V${helperVersion || "未知"}），请安装最新版`;
     return {
       status: "helper-outdated",
-      message: `数据助手版本过旧（当前 V${helperVersion || "未知"}），请安装最新版`,
+      message,
       code: "HELPER_OUTDATED",
       helperVersion,
+      diagnostic: browserDiagnostic("field-missing", "HELPER_OUTDATED", message, "安装最新版数据助手，以匹配当前网页所需的诊断和战绩字段。"),
       player: null,
     };
   }
@@ -131,6 +156,7 @@ export async function probeLocalConnection(): Promise<LocalConnectionProbe> {
       message: localError.message,
       code: localError.code,
       helperVersion,
+      diagnostic: localError.diagnostic ?? browserDiagnostic("client-login", localError.code, localError.message, "启动国服 LOL 客户端并完成登录，然后重新检测。"),
       player: null,
     };
   }

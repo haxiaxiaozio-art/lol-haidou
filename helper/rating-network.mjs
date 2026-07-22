@@ -33,6 +33,7 @@ export function buildRatingGraph(games, targetPlayer, region, acceptedMatchIds =
   const matches = [];
 
   for (const game of Array.isArray(games) ? games : []) {
+    if (game?.modelVersion !== 1) continue;
     const rawMatchId = gameId(game);
     if (!rawMatchId || (accepted.size > 0 && !accepted.has(String(rawMatchId)))) continue;
     const participants = Array.isArray(game?.participants) ? game.participants : [];
@@ -88,13 +89,13 @@ export async function submitRatingGraph(graph) {
     const query = new URL(api);
     query.searchParams.set("region", graph.region);
     query.searchParams.set("player", graph.targetHash);
-    return (await ratingRequest(query, { headers: { "User-Agent": "HaiDouHelper/13" } })).estimate;
+    return (await ratingRequest(query, { headers: { "User-Agent": "HaiDouHelper/17" } })).estimate;
   }
   for (let offset = 0; offset < graph.matches.length; offset += 20) {
     const body = { ...graph, matches: graph.matches.slice(offset, offset + 20) };
     lastResult = await ratingRequest(api, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "HaiDouHelper/13" },
+      headers: { "Content-Type": "application/json", "User-Agent": "HaiDouHelper/17" },
       body: JSON.stringify(body),
     });
   }

@@ -4,6 +4,9 @@ export type SourceDiagnostics = {
   requestedCount: number | null;
   scannedCount: number;
   haidouCount: number;
+  historySources?: Array<"sgp" | "lcu" | "logs">;
+  sourceCounts?: { sgp: number; lcu: number; logs: number };
+  fallbackReasons?: string[];
 };
 
 export type DataQualityReport = {
@@ -53,6 +56,7 @@ export function analyzeDataQuality(
   if (diagnostics.requestedCount && diagnostics.scannedCount < diagnostics.requestedCount) {
     missingReasons.push(`请求 ${diagnostics.requestedCount} 场，客户端与本机日志实际返回 ${diagnostics.scannedCount} 场。`);
   }
+  for (const reason of diagnostics.fallbackReasons ?? []) missingReasons.push(reason);
   if (diagnostics.haidouCount < 5) missingReasons.push("本次筛出的海斗不足 5 场，操作总分暂不具备稳定性。");
   if (metricsCoverage < 100) missingReasons.push("部分战斗指标缺失，缺失字段不会被当作真实的 0 表现解释。");
   if (roleCoverage < 100) missingReasons.push("部分英雄缺少客户端主分类，已回退到对局位置或战士分类。");
@@ -74,7 +78,11 @@ export function analyzeDataQuality(
   return {
     score,
     status,
-    sourceLabel: dataset.source === "local-client" ? "LOL 客户端 + 本机日志" : dataset.source === "imported" ? "本地 CSV / JSON" : "内置演示数据",
+    sourceLabel: dataset.source === "local-client"
+      ? (diagnostics.historySources?.length
+        ? diagnostics.historySources.map((source) => source === "sgp" ? "本机 SGP" : source === "lcu" ? "LCU" : "本机日志").join(" + ")
+        : "LOL 客户端 + 本机日志")
+      : dataset.source === "imported" ? "本地 CSV / JSON" : "内置演示数据",
     sampleLabel: `${diagnostics.scannedCount} 场扫描 · ${diagnostics.haidouCount} 场海斗`,
     indicators: [
       { key: "scan", label: "扫描返回", value: scanCoverage, detail: diagnostics.requestedCount ? `${diagnostics.scannedCount}/${diagnostics.requestedCount} 场` : `${diagnostics.scannedCount} 场`, tone: scanCoverage >= 90 ? "good" : "warn" },
