@@ -14,13 +14,28 @@ const outputPath = join(releaseDirectory, "HaiDouHelperSetup.exe");
 const stagingDirectory = await mkdtemp(join(tmpdir(), "haidou-helper-installer-"));
 const payloadDirectory = join(stagingDirectory, "payload");
 const stagedOutputPath = join(stagingDirectory, "HaiDouHelperSetup.exe");
+const stagedInstallerPath = join(stagingDirectory, "HaiDouInstaller.exe");
 const sedPath = join(stagingDirectory, "haidou-helper.sed");
 
+const cscPath = join(process.env.SystemRoot ?? "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+execFileSync(cscPath, [
+  "/nologo",
+  "/target:winexe",
+  "/optimize+",
+  "/platform:anycpu",
+  "/codepage:65001",
+  `/out:${stagedInstallerPath}`,
+  "/reference:System.dll",
+  "/reference:System.Core.dll",
+  "/reference:System.Drawing.dll",
+  "/reference:System.Windows.Forms.dll",
+  join(installerSourceDirectory, "HaiDouInstaller.cs"),
+], { cwd: stagingDirectory, stdio: "inherit" });
+signWindowsArtifact(stagedInstallerPath);
+
 const files = [
+  [stagedInstallerPath, "HaiDouInstaller.exe"],
   [join(helperDirectory, "HaiDouHelper.exe"), "HaiDouHelper.exe"],
-  [join(installerSourceDirectory, "install.cmd"), "install.cmd"],
-  [join(installerSourceDirectory, "install-helper.ps1"), "install-helper.ps1"],
-  [join(installerSourceDirectory, "uninstall-helper.ps1"), "uninstall-helper.ps1"],
   [join(installerSourceDirectory, "start-hidden.vbs"), "start-hidden.vbs"],
   [join(installerSourceDirectory, "README.txt"), "README.txt"],
 ];
@@ -30,15 +45,11 @@ await mkdir(releaseDirectory, { recursive: true });
 for (const [source, name] of files) {
   const destination = join(payloadDirectory, name);
   await copyFile(source, destination);
-  if (name.endsWith(".ps1")) {
-    const content = await readFile(destination, "utf8");
-    await writeFile(destination, content.startsWith("\uFEFF") ? content : `\uFEFF${content}`, "utf8");
-  }
 }
 
 const fileStrings = files.map(([, name], index) => `FILE${index}="${name}"`).join("\r\n");
 const fileEntries = files.map((_, index) => `%FILE${index}%=\r\n`).join("");
-const sed = `[Version]\r\nClass=IEXPRESS\r\nSEDVersion=3\r\n[Options]\r\nPackagePurpose=InstallApp\r\nShowInstallProgramWindow=1\r\nHideExtractAnimation=1\r\nUseLongFileName=1\r\nInsideCompressed=0\r\nCAB_FixedSize=0\r\nCAB_ResvCodeSigning=0\r\nRebootMode=N\r\nInstallPrompt=%InstallPrompt%\r\nDisplayLicense=%DisplayLicense%\r\nFinishMessage=%FinishMessage%\r\nTargetName=${stagedOutputPath}\r\nFriendlyName=%FriendlyName%\r\nAppLaunched=%AppLaunched%\r\nPostInstallCmd=<None>\r\nAdminQuietInstCmd=%AppLaunched%\r\nUserQuietInstCmd=%AppLaunched%\r\nSourceFiles=SourceFiles\r\n[Strings]\r\nInstallPrompt=Install HaiDou Data Helper for the current Windows user?\r\nDisplayLicense=\r\nFinishMessage=HaiDou Data Helper is installed and running. Return to the website to continue.\r\nFriendlyName=HaiDou Data Helper\r\nAppLaunched=cmd.exe /d /c install.cmd\r\n${fileStrings}\r\n[SourceFiles]\r\nSourceFiles0=${payloadDirectory}\\\r\n[SourceFiles0]\r\n${fileEntries}`;
+const sed = `[Version]\r\nClass=IEXPRESS\r\nSEDVersion=3\r\n[Options]\r\nPackagePurpose=InstallApp\r\nShowInstallProgramWindow=0\r\nHideExtractAnimation=1\r\nUseLongFileName=1\r\nInsideCompressed=0\r\nCAB_FixedSize=0\r\nCAB_ResvCodeSigning=0\r\nRebootMode=N\r\nInstallPrompt=%InstallPrompt%\r\nDisplayLicense=%DisplayLicense%\r\nFinishMessage=%FinishMessage%\r\nTargetName=${stagedOutputPath}\r\nFriendlyName=%FriendlyName%\r\nAppLaunched=%AppLaunched%\r\nPostInstallCmd=<None>\r\nAdminQuietInstCmd=%AppLaunched%\r\nUserQuietInstCmd=%AppLaunched%\r\nSourceFiles=SourceFiles\r\n[Strings]\r\nInstallPrompt=\r\nDisplayLicense=\r\nFinishMessage=\r\nFriendlyName=HaiDou Data Helper\r\nAppLaunched=HaiDouInstaller.exe\r\n${fileStrings}\r\n[SourceFiles]\r\nSourceFiles0=${payloadDirectory}\\\r\n[SourceFiles0]\r\n${fileEntries}`;
 
 await writeFile(sedPath, sed, "utf8");
 try {
