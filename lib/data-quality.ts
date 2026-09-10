@@ -1,4 +1,5 @@
 import type { CalibrationModel, PlayerDataset, Role } from "./types";
+import { teamShare } from "./performance-v2.mjs";
 
 export type SourceDiagnostics = {
   requestedCount: number | null;
@@ -32,6 +33,7 @@ export function analyzeDataQuality(
   dataset: PlayerDataset,
   diagnostics: SourceDiagnostics,
   calibration: CalibrationModel | null,
+  engine: "legacy" | "performance-v2" = "legacy",
 ): DataQualityReport {
   const matches = dataset.matches;
   const metricsCoverage = Math.round(average(matches.map((match) =>
@@ -44,11 +46,13 @@ export function analyzeDataQuality(
     match.dataQuality?.itemsPresent ?? Array.isArray(match.items)).length, matches.length);
   const timelineCoverage = percent(matches.filter((match) =>
     match.dataQuality?.recallTimeline === "exact" || Boolean(match.recall)).length, matches.length);
+  const teamCoverage = percent(matches.filter((match) => ["damage", "gold", "controlSeconds"].every((key) => teamShare(match, key) !== null)).length, matches.length);
   const scanCoverage = diagnostics.requestedCount
     ? percent(diagnostics.scannedCount, diagnostics.requestedCount)
     : 100;
   const haidouShare = percent(diagnostics.haidouCount, diagnostics.scannedCount);
-  const score = Math.round(metricsCoverage * 0.4 + roleCoverage * 0.2 + augmentCoverage * 0.15 + itemCoverage * 0.2 + timelineCoverage * 0.05);
+  const legacyQuality = metricsCoverage * 0.4 + roleCoverage * 0.2 + augmentCoverage * 0.15 + itemCoverage * 0.2 + timelineCoverage * 0.05;
+  const score = Math.round(engine === "performance-v2" ? legacyQuality * .8 + teamCoverage * .2 : legacyQuality);
   const status = score >= 88 ? "完整" : score >= 68 ? "可用" : "需补字段";
   const missingReasons: string[] = [];
 
@@ -65,7 +69,8 @@ export function analyzeDataQuality(
   if (matches.some((match) => [...match.augments, ...(match.items ?? [])].some((name) => /(?:海克斯|装备)\s*\d+/i.test(name)))) {
     missingReasons.push("仍有海克斯或装备只返回数字 ID，名称表覆盖不完整。");
   }
-  if (!calibration) missingReasons.push("未取得社区校准模型，本次评分继续使用版本化固定基线。");
+  if (teamCoverage < 100) missingReasons.push("部分对局缺少完整队伍总量，输出、经济、控制占比仅使用有完整分母的场次。");
+  if (!calibration && engine === "legacy") missingReasons.push("未取得社区校准模型，本次旧版评分继续使用版本化固定基线。");
 
   const target = calibration?.minimumRoleSamples ?? 100;
   const calibrationRoles = (calibration?.roles ?? []).map((entry) => ({
@@ -90,6 +95,7 @@ export function analyzeDataQuality(
       { key: "role", label: "职业识别", value: roleCoverage, detail: roleCoverage === 100 ? "主分类完整" : "含位置回退", tone: roleCoverage >= 95 ? "good" : "warn" },
       { key: "metrics", label: "战斗字段", value: metricsCoverage, detail: "8 项核心指标", tone: metricsCoverage >= 95 ? "good" : "warn" },
       { key: "items", label: "装备覆盖", value: itemCoverage, detail: `${itemCoverage}% 对局可用`, tone: itemCoverage >= 90 ? "good" : "warn" },
+      { key: "team", label: "队伍占比", value: teamCoverage, detail: "五人同口径分母", tone: teamCoverage >= 90 ? "good" : "warn" },
       { key: "timeline", label: "时序精度", value: timelineCoverage, detail: timelineCoverage ? "含精确回城节点" : "仅赛后汇总", tone: timelineCoverage >= 80 ? "good" : "muted" },
     ],
     missingReasons,

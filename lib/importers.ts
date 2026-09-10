@@ -1,5 +1,6 @@
 import { ROLES, type MatchRecord, type PlayerDataset, type Role } from "./types";
 import { normalizeScoringSnapshot } from "./replay-report.mjs";
+import { PERFORMANCE_VERSION } from "./performance-v2.mjs";
 
 const REQUIRED_HEADERS = [
   "match_id", "played_at", "patch", "champion", "role", "win", "duration_minutes",
@@ -61,13 +62,43 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
   const items = Array.isArray(value.items)
     ? value.items.map(String).filter(Boolean)
     : String(value.items ?? "").split(/[|；;]/).map((item) => item.trim()).filter(Boolean);
-  const recallMinute = value.recallPickMinute ?? value.recall_pick_minute;
+  const recall = value.recall as Record<string, unknown> | undefined;
+  const recallMinute = value.recallPickMinute ?? value.recall_pick_minute ?? recall?.pickedAtMinute;
   const hasRecall = recallMinute !== undefined && recallMinute !== null && String(recallMinute) !== "";
+  const quality = value.dataQuality as MatchRecord["dataQuality"];
+  const metricFields = { damage: "damage", controlSeconds: "control_seconds", healing: "healing", shielding: "shielding", mitigated: "mitigated", damageTaken: "damage_taken", selfHealing: "self_healing", gold: "gold" };
+  const metrics = {} as MatchRecord["metrics"];
+  const metricsPresent: Array<keyof MatchRecord["metrics"]> = [];
+  for (const [key, alias] of Object.entries(metricFields)) {
+    const typedKey = key as keyof MatchRecord["metrics"];
+    const raw = value[key] ?? value[alias] ?? (value.metrics as Record<string, unknown> | undefined)?.[key];
+    const present = raw !== undefined && raw !== null && raw !== "" && (!quality || quality.metricsPresent?.includes(typedKey));
+    metrics[typedKey] = present ? numberValue(raw, key) : 0;
+    if (present) metricsPresent.push(typedKey);
+  }
+  const rawTeam = value.teamTotals as Record<string, unknown> | undefined;
+  const teamTotals: MatchRecord["teamTotals"] = rawTeam?.participants === 5 ? { participants: 5 } : undefined;
+  if (teamTotals) for (const key of ["damage", "gold", "controlSeconds"] as const) {
+    if (typeof rawTeam?.[key] === "number" && Number.isFinite(rawTeam[key]) && rawTeam[key] >= metrics[key]) teamTotals[key] = rawTeam[key];
+  }
+  const playedAt = String(value.playedAt ?? value.played_at ?? new Date().toISOString());
+  if (!Number.isFinite(Date.parse(playedAt))) throw new Error(`第 ${index + 1} 局日期无效`);
+  const parsedRecall = hasRecall ? {
+    pickedAtMinute: numberValue(recallMinute, "回城选择时间"),
+    deathsBefore: numberValue(value.deathsBeforeRecall ?? value.deaths_before_recall ?? recall?.deathsBefore ?? 0, "回城前死亡"),
+    deathsAfter: numberValue(value.deathsAfterRecall ?? value.deaths_after_recall ?? recall?.deathsAfter ?? 0, "回城后死亡"),
+  } : undefined;
+  if (parsedRecall && (parsedRecall.pickedAtMinute > durationMinutes || parsedRecall.deathsBefore + parsedRecall.deathsAfter !== Number(value.deaths))) throw new Error(`第 ${index + 1} 局回城时间或前后死亡数不一致`);
   return {
     id: String(value.id ?? value.match_id ?? `IMPORT-${index + 1}`),
-    playedAt: String(value.playedAt ?? value.played_at ?? new Date().toISOString()),
+    playedAt,
     patch: String(value.patch ?? "未知"),
     champion: String(value.champion ?? "未知英雄"),
+    championId: value.championId ? String(value.championId) : undefined,
+    championKey: typeof value.championKey === "string" && /^[a-zA-Z]+$/.test(value.championKey) ? value.championKey : undefined,
+    augmentIds: Array.isArray(value.augmentIds) ? value.augmentIds.map(String) : undefined,
+    itemIds: Array.isArray(value.itemIds) ? value.itemIds.map(String) : undefined,
+    teamTotals,
     role,
     secondaryRole: secondaryRole === role ? undefined : secondaryRole,
     win: booleanValue(value.win),
@@ -75,27 +106,12 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
     kills: numberValue(value.kills, "击杀"),
     deaths: numberValue(value.deaths, "死亡"),
     assists: numberValue(value.assists, "助攻"),
-    metrics: {
-      damage: numberValue(value.damage ?? (value.metrics as Record<string, unknown> | undefined)?.damage, "伤害"),
-      controlSeconds: numberValue(value.controlSeconds ?? value.control_seconds ?? (value.metrics as Record<string, unknown> | undefined)?.controlSeconds, "控制时间"),
-      healing: numberValue(value.healing ?? (value.metrics as Record<string, unknown> | undefined)?.healing, "治疗"),
-      shielding: numberValue(value.shielding ?? (value.metrics as Record<string, unknown> | undefined)?.shielding, "护盾"),
-      mitigated: numberValue(value.mitigated ?? (value.metrics as Record<string, unknown> | undefined)?.mitigated, "伤害减免"),
-      damageTaken: numberValue(value.damageTaken ?? value.damage_taken ?? (value.metrics as Record<string, unknown> | undefined)?.damageTaken, "承伤"),
-      selfHealing: numberValue(value.selfHealing ?? value.self_healing ?? (value.metrics as Record<string, unknown> | undefined)?.selfHealing, "自我治疗"),
-      gold: numberValue(value.gold ?? (value.metrics as Record<string, unknown> | undefined)?.gold, "经济"),
-    },
+    metrics,
     augments,
     items,
-    recall: hasRecall
-      ? {
-          pickedAtMinute: numberValue(recallMinute, "回城选择时间"),
-          deathsBefore: numberValue(value.deathsBeforeRecall ?? value.deaths_before_recall ?? 0, "回城前死亡"),
-          deathsAfter: numberValue(value.deathsAfterRecall ?? value.deaths_after_recall ?? 0, "回城后死亡"),
-        }
-      : undefined,
+    recall: parsedRecall,
     dataQuality: {
-      metricsPresent: ["damage", "controlSeconds", "healing", "shielding", "mitigated", "damageTaken", "selfHealing", "gold"],
+      metricsPresent,
       roleSource: "provided",
       augmentsPresent: value.augments !== undefined,
       itemsPresent: value.items !== undefined,
@@ -104,11 +120,13 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
   };
 };
 
-const parseJson = (text: string): PlayerDataset => {
+export const parseJson = (text: string): PlayerDataset => {
   const raw = JSON.parse(text) as Record<string, unknown> | Array<Record<string, unknown>>;
   const container = Array.isArray(raw) ? { matches: raw } : raw;
+  if (container.scoringEngine === "performance-v2" && container.scoringEngineVersion && container.scoringEngineVersion !== PERFORMANCE_VERSION) throw new Error("该报告使用不同的 V2 规则版本，暂不支持原分数重放，请使用对应版本网站。");
   const rawMatches = container.matches;
   if (!Array.isArray(rawMatches) || rawMatches.length === 0) throw new Error("JSON 中需要至少一局 matches 数据");
+  if (rawMatches.length > 500) throw new Error("单份战报最多导入 500 场，请拆分文件后导入");
   const player = (container.player ?? {}) as Record<string, unknown>;
   return {
     schemaVersion: 1,
@@ -120,6 +138,8 @@ const parseJson = (text: string): PlayerDataset => {
       updatedAt: new Date().toISOString(),
     },
     matches: rawMatches.map((match, index) => normalizeMatch(match as Record<string, unknown>, index)),
+    scoringEngine: container.scoringEngine === "performance-v2" ? "performance-v2" : container.scoringEngine === "legacy" || container.scoringSnapshot ? "legacy" : undefined,
+    scoringEngineVersion: container.scoringEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined,
     scoringSnapshot: normalizeScoringSnapshot(container.scoringSnapshot) as PlayerDataset["scoringSnapshot"],
   };
 };
@@ -127,6 +147,7 @@ const parseJson = (text: string): PlayerDataset => {
 const parseCsv = (text: string): PlayerDataset => {
   const [headers, ...rows] = parseCsvRows(text);
   if (!headers) throw new Error("CSV 文件为空");
+  if (rows.length > 500) throw new Error("单份战报最多导入 500 场，请拆分文件后导入");
   const missing = REQUIRED_HEADERS.filter((header) => !headers.includes(header));
   if (missing.length) throw new Error(`CSV 缺少字段：${missing.join("、")}`);
   const matches = rows.map((row, rowIndex) => {

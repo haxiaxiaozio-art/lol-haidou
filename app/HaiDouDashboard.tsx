@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { DEMO_DATASET } from "../lib/demo-data";
 import { importDataset, CSV_HEADERS } from "../lib/importers";
-import { buildMatchCommentary } from "../lib/match-commentary";
+import { buildMatchCommentary } from "../lib/match-commentary.mjs";
 import { fetchCommunityCalibration } from "../lib/calibration-client";
 import { analyzeDataQuality, type SourceDiagnostics } from "../lib/data-quality";
 import {
@@ -18,9 +18,14 @@ import {
 import { summarizePlayer } from "../lib/scoring";
 import type { CalibrationModel, LocalClientPlayer, MatchRecord, NetworkRatingEstimate, PlayerDataset, ScoredMatch, SyncDiagnostic } from "../lib/types";
 import styles from "./page.module.css";
+import upgrade from "./upgrade.module.css";
+import PerformancePanel from "./PerformancePanel";
+import ReportLibrary from "./ReportLibrary";
+import MatchAssets from "./MatchAssets";
+import { PERFORMANCE_VERSION } from "../lib/performance-v2.mjs";
 
 type MatchFilter = "全部" | "胜利" | "失败";
-type SourceMode = "demo" | "file" | "search" | "local";
+type SourceMode = "demo" | "file" | "search" | "local" | "library";
 type FlowStatus = "idle" | "resolving" | "connected" | "syncing" | "scoring" | "ready";
 
 const REGIONS = ["艾欧尼亚", "黑色玫瑰", "峡谷之巅", "联盟一区", "联盟二区", "联盟三区", "联盟四区", "联盟五区"];
@@ -198,6 +203,7 @@ function withScoringSnapshot(dataset: PlayerDataset, model: CalibrationModel | n
 }
 
 function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightThreshold: number }) {
+  const [expanded, setExpanded] = useState(false);
   const match = item.match;
   const commentary = buildMatchCommentary(item);
   return (
@@ -220,15 +226,16 @@ function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightTh
         <strong>{item.score}</strong>
         <span>{resultLabel(item.score, highlightThreshold)}</span>
       </div>
-      <details className={styles.matchDetails}>
+      <details className={styles.matchDetails} onToggle={(event) => setExpanded(event.currentTarget.open)}>
         <summary>评分明细</summary>
+        {item.evaluation && <p className={upgrade.scoreBasis}>V2 试算 · 基线 70 · {item.evaluation.championSpecific ? item.evaluation.basis : "通用职业规则（此英雄尚无专属规则）"} · 同英雄同版本个人样本 {item.evaluation.peers} 局 · 字段覆盖 {item.evaluation.coverage}%<br />{item.evaluation.peers < 5 ? "同英雄样本不足，不使用个人历史调整基准。" : "仅参考本份战报中的相近时长对局，不代表全服水平。"}</p>}
         <div className={styles.roleBlend} aria-label="主职业基础分与副职业加权奖励">
           <span>职业评分</span>
           {item.roleComponents.map((component) => (
             <div key={component.role}>
               <strong>{component.kind === "primary" ? "主" : "副"}·{component.role}</strong>
               <b>{component.kind === "secondary" ? `+${component.contribution}` : component.score}</b>
-              <small>{component.kind === "secondary" ? `${component.score} × ${Math.round(component.weight * 100)}%` : "完整计分"}</small>
+              <small>{component.kind === "secondary" ? item.evaluation ? "超出 70 的部分 × 40%，最多 +6" : `${component.score} × ${Math.round(component.weight * 100)}%` : "完整计分"}</small>
             </div>
           ))}
           {item.roleComponents.length === 2 && <em>加权后 {item.positiveScore} · 上限 100</em>}
@@ -237,8 +244,9 @@ function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightTh
           {item.dimensions.map((dimension) => (
             <div key={dimension.label}>
               <span>{dimension.label}</span>
-              <strong>{dimension.score}</strong>
+              <strong>{dimension.missing ? "暂无" : dimension.score}</strong>
               <small>{dimension.displayValue}</small>
+              {dimension.expected && !dimension.missing && <small>参考基准 {dimension.expected}</small>}
             </div>
           ))}
         </div>
@@ -246,13 +254,11 @@ function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightTh
           正向表现 {item.positiveScore}，生存表现 {item.survivalScore}
           {item.recallApplied ? "，已应用历史回城死亡加权" : "，按普通死亡规则计算"}。
         </p>
-        {Boolean(match.items?.length) && (
-          <div className={styles.matchBuild}><span>本局出装</span>{match.items?.map((equipment) => <b key={equipment}>{equipment}</b>)}</div>
-        )}
+        {expanded && <MatchAssets key={match.patch} match={match} />}
         <div className={styles.matchCommentary}>
           <span>海斗锐评 · 参战 {commentary.participation}</span>
-          <strong>{commentary.verdict}</strong>
-          <p>{commentary.improvement}</p>
+          <strong>{item.evaluation && item.evaluation.coverage < 60 ? "这局数据缺得有点多，先不急着给你下结论。" : commentary.verdict}</strong>
+          <p>{item.evaluation && item.evaluation.coverage < 60 ? "补齐战报再复盘，比拿缺失的字段当零分更靠谱。" : commentary.improvement}</p>
         </div>
       </details>
     </article>
@@ -262,7 +268,8 @@ function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightTh
 export default function HaiDouDashboard() {
   const [dataset, setDataset] = useState<PlayerDataset>(DEMO_DATASET);
   const [filter, setFilter] = useState<MatchFilter>("全部");
-  const [sourceMode, setSourceMode] = useState<SourceMode>("demo");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("library");
+  const [scoreEngine, setScoreEngine] = useState<"legacy" | "performance-v2">("performance-v2");
   const [region, setRegion] = useState(DEMO_DATASET.player.region);
   const [gameName, setGameName] = useState(DEMO_DATASET.player.gameName);
   const [tagLine, setTagLine] = useState(DEMO_DATASET.player.tag);
@@ -270,7 +277,7 @@ export default function HaiDouDashboard() {
   const [searchTagLine, setSearchTagLine] = useState("");
   const [matchCount, setMatchCount] = useState(20);
   const [flowStatus, setFlowStatus] = useState<FlowStatus>("idle");
-  const [flowDetail, setFlowDetail] = useState("当前能力：演示、文件、我的战绩与同区玩家检索");
+  const [flowDetail, setFlowDetail] = useState("历史战报可直接打开；新战绩需要同步一次");
   const [lookupError, setLookupError] = useState("");
   const [localPlayer, setLocalPlayer] = useState<LocalClientPlayer | null>(null);
   const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
@@ -286,10 +293,10 @@ export default function HaiDouDashboard() {
     scannedCount: DEMO_DATASET.matches.length,
     haidouCount: DEMO_DATASET.matches.length,
   });
-  const summary = useMemo(() => summarizePlayer(dataset, calibrationModel), [dataset, calibrationModel]);
+  const summary = useMemo(() => summarizePlayer(dataset, calibrationModel, scoreEngine), [dataset, calibrationModel, scoreEngine]);
   const dataQuality = useMemo(
-    () => analyzeDataQuality(dataset, sourceDiagnostics, calibrationModel),
-    [dataset, sourceDiagnostics, calibrationModel],
+    () => analyzeDataQuality(dataset, sourceDiagnostics, calibrationModel, scoreEngine),
+    [dataset, sourceDiagnostics, calibrationModel, scoreEngine],
   );
   const visibleDiagnostics = useMemo(() => {
     const byCategory = new Map<SyncDiagnostic["category"], SyncDiagnostic>();
@@ -303,6 +310,7 @@ export default function HaiDouDashboard() {
   const activeStep = flowStatus === "ready" ? 3 : flowStatus === "connected" || isFlowBusy ? 2 : 1;
 
   useEffect(() => {
+    if (sourceMode !== "local" && sourceMode !== "search") return;
     let active = true;
     const refreshConnection = async () => {
       const connection = await probeLocalConnection();
@@ -316,7 +324,7 @@ export default function HaiDouDashboard() {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [sourceMode]);
 
   useEffect(() => {
     let active = true;
@@ -346,6 +354,7 @@ export default function HaiDouDashboard() {
     try {
       const imported = await importDataset(file);
       setDataset(imported);
+      setScoreEngine(imported.scoringEngine ?? "performance-v2");
       if (imported.scoringSnapshot) {
         setCalibrationModel(imported.scoringSnapshot.model);
         setCalibrationError("");
@@ -388,10 +397,10 @@ export default function HaiDouDashboard() {
     }
     setFlowStatus("idle");
     setFlowDetail(
-      nextSource === "demo"
+      nextSource === "library" ? "历史战报无需助手；云端新战绩接口暂未接入授权来源" : nextSource === "demo"
         ? "演示数据最多提供 31 场流程样本"
         : nextSource === "file"
-          ? "文件导入不限制到固定档位"
+          ? "文件最多导入 500 场，不受扫描档位影响"
           : nextSource === "search"
             ? localPlayer
               ? `可以检索 ${localPlayer.region} 的玩家战绩`
@@ -648,7 +657,7 @@ export default function HaiDouDashboard() {
   };
 
   const exportReplayReport = () => {
-    const replayDataset = withScoringSnapshot(dataset, calibrationModel);
+    const replayDataset = { ...withScoringSnapshot(dataset, calibrationModel), scoringEngine: scoreEngine, scoringEngineVersion: scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined };
     const safeName = dataset.player.gameName.replace(/[\\/:*?"<>|]/g, "_");
     downloadBlob(
       JSON.stringify(replayDataset, null, 2),
@@ -679,12 +688,12 @@ export default function HaiDouDashboard() {
       <header className={styles.topbar}>
         <a className={styles.wordmark} href="./" aria-label="海斗战报首页">
           <span className={styles.logoMark}>H</span>
-          <span><strong>海斗战报</strong><small>本地数据实验室</small></span>
+          <span><strong>海斗战报</strong><small>HAIDOU · 独立复盘工具</small></span>
         </a>
         <div className={styles.headerActions}>
-          <span className={styles.localBadge} data-status={localConnection.status} title={localConnection.message}>
+          {(sourceMode === "local" || sourceMode === "search") ? <span className={styles.localBadge} data-status={localConnection.status} title={localConnection.message}>
             <i aria-hidden="true" />{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : CONNECTION_LABEL[localConnection.status]}
-          </span>
+          </span> : <span className={styles.localBadge}>查看战报无需登录</span>}
           <button className={styles.themeButton} type="button" onClick={toggleTheme} aria-label="切换白天或深夜模式">
             <span className={styles.themeDarkLabel} aria-hidden="true">☾ 深夜</span>
             <span className={styles.themeLightLabel} aria-hidden="true">☀ 白天</span>
@@ -694,11 +703,12 @@ export default function HaiDouDashboard() {
 
       <main id="main-content" className={styles.shell}>
         <section className={styles.flowDeck} aria-labelledby="flow-title">
-          <div className={styles.flowHeader}>
+          <div className={`${styles.flowHeader} ${upgrade.hero}`}>
             <div>
-            <span className={styles.flowKicker}>主流程 · V0.6</span>
-              <h1 id="flow-title">从玩家身份开始生成海斗战报</h1>
-              <p>登录 LOL 后可读取自己的战绩，也可按 Riot ID 检索同区玩家；演示数据与文件导入继续保留。</p>
+            <span className={styles.flowKicker}>ARAM MAYHEM / MATCH REPORT</span>
+              <h1 id="flow-title">战绩之外，<br /><em>看见你的作用。</em></h1>
+              <p>输出、保护、承伤、控制。人头不是这局的全部。</p>
+              <small>从玩家身份开始生成海斗战报 · 非 Riot 官方产品</small>
             </div>
             <ol className={styles.flowSteps} aria-label="生成战报进度">
               {["选择来源", "准备数据", "查看战报"].map((step, index) => {
@@ -709,7 +719,10 @@ export default function HaiDouDashboard() {
             </ol>
           </div>
 
-          <div className={styles.sourceTabs} role="tablist" aria-label="选择数据来源">
+          <div className={`${styles.sourceTabs} ${upgrade.fiveTabs}`} role="tablist" aria-label="选择数据来源">
+            <button type="button" role="tab" aria-selected={sourceMode === "library"} onClick={() => changeSource("library")}>
+              <span>我的战报库</span><small>关闭游戏，也能回来复盘</small>
+            </button>
             <button type="button" role="tab" aria-selected={sourceMode === "demo"} onClick={() => changeSource("demo")}>
               <span>演示检索</span><small>无需文件，立即体验</small>
             </button>
@@ -725,7 +738,12 @@ export default function HaiDouDashboard() {
           </div>
 
           <div className={styles.flowBody}>
-            {sourceMode === "demo" ? (
+            {sourceMode === "library" ? <ReportLibrary dataset={{ ...withScoringSnapshot(dataset, calibrationModel), scoringEngine: scoreEngine, scoringEngineVersion: scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined }} onOpen={(loaded) => {
+              setDataset(loaded); setScoreEngine(loaded.scoringEngine ?? "performance-v2"); setNetworkRating(null);
+              setCalibrationModel(loaded.scoringSnapshot?.model ?? null);
+              setSourceDiagnostics({ requestedCount: null, scannedCount: loaded.matches.length, haidouCount: loaded.matches.length });
+              setFlowStatus("ready"); setFlowDetail("已打开本地历史战报，这不是新同步的战绩"); setFilter("全部"); scrollToReport();
+            }} /> : sourceMode === "demo" ? (
               <form className={styles.lookupForm} onSubmit={runDemoLookup} noValidate>
                 <label>
                   <span>大区</span>
@@ -773,7 +791,7 @@ export default function HaiDouDashboard() {
                 </div>
                 <div className={styles.schemaNote}>
                   <span>格式要求</span>
-                  <p>主、副职业仅接受辅助、法师、刺客、坦克、射手、战士，副职业可留空。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
+                  <p>单份文件最多 500 场、5 MB。主、副职业仅接受辅助、法师、刺客、坦克、射手、战士，副职业可留空。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
                 </div>
               </div>
             ) : sourceMode === "search" ? (
@@ -874,14 +892,14 @@ export default function HaiDouDashboard() {
               <span>{dataset.source === "demo" ? "演示检索" : dataset.source === "local-client" ? "LOL 客户端" : "本地导入"}</span>
             </div>
             <h1 id="player-name">{dataset.player.gameName}<span>#{dataset.player.tag}</span></h1>
-            <p>最近 {dataset.matches.length} 局海斗复盘，按英雄职业、对局时长与死亡规则计算。</p>
+            <p>最近 {dataset.matches.length} 局海斗复盘。{scoreEngine === "performance-v2" ? "英雄特征与多维表现试算，不代表官方实力分。" : "旧版职业评分，保留历史对照。"}</p>
           </div>
 
           <div className={styles.scoreCluster} aria-label={`操作总得分 ${summary.overallScore ?? "样本不足"}`}>
             <div className={styles.hexScore}>
-              <span>操作总分</span>
+              <span>{scoreEngine === "performance-v2" ? "表现估算 · V2" : "操作总分 · 旧版"}</span>
               <strong>{summary.overallScore ?? "--"}</strong>
-              <small>置信度 {summary.confidence}%</small>
+              <small>样本充足度 {summary.confidence}%</small>
             </div>
             <p>{summary.overallScore && summary.overallScore >= 70 ? "强项清晰，继续降低关键死亡。" : "先累积更多对局，再观察稳定表现。"}</p>
             <div className={styles.networkScore}>
@@ -901,10 +919,17 @@ export default function HaiDouDashboard() {
           </dl>
         </section>
 
+        <div className={upgrade.engineToolbar}>
+          <div><strong>评分引擎</strong><span>{scoreEngine === "performance-v2" ? "70 分为规则基线。V2 尚在试算，不使用旧版社区职业校准参数。" : "旧版规则与社区校准参数。用于对照，不与 V2 直接横比。"}</span></div>
+          <label>选择算法<select value={scoreEngine} onChange={(e) => setScoreEngine(e.target.value as "legacy" | "performance-v2")}><option value="performance-v2">V2 多维表现 · 试算</option><option value="legacy">旧版职业评分 · 对照</option></select></label>
+          <button type="button" onClick={() => { changeSource("library"); document.getElementById("flow-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>保存 / 打开战报</button>
+        </div>
+        <PerformancePanel dataset={dataset} />
+
         <section className={styles.qualitySection} aria-labelledby="quality-title">
           <div className={styles.qualityHeading}>
             <div><span>可信度链路</span><h2 id="quality-title">数据质量与真实样本校准</h2></div>
-            <p>质量只说明数据是否足够完整，不参与抬高或压低玩家操作分。</p>
+            <p>质量只说明数据是否足够完整。V2 缺失项不计权重，并将不充分的估算收缩到中性基线。</p>
           </div>
           <div className={styles.qualityOverview}>
             <div className={styles.qualityScore} data-status={dataQuality.status}>
@@ -929,9 +954,11 @@ export default function HaiDouDashboard() {
             </aside>
           </div>
 
+          <details className={upgrade.legacyModel} open={scoreEngine === "legacy"} key={scoreEngine}>
+          <summary>旧版社区模型与治理记录（不参与 V2 计算）</summary>
           <div className={styles.calibrationPanel}>
             <div className={styles.calibrationMeta}>
-              <span>社区校准模型</span>
+              <span>社区校准模型 · 仅用于旧版评分</span>
               <strong>{calibrationModel ? calibrationStatusLabel[calibrationModel.status] : "固定基线"}</strong>
               <small>{calibrationModel ? `${calibrationModel.totalSamples} 份真实匿名样本 · ${calibrationModel.version}` : calibrationError || "同步客户端后读取公共聚合模型"}</small>
             </div>
@@ -945,20 +972,12 @@ export default function HaiDouDashboard() {
                   </div>
                 ))}
               </div>
-            ) : <p className={styles.calibrationEmpty}>公共模型暂未连接。评分仍使用可追踪的 rules-2026.07 基线，不会因网络失败而改变算法。</p>}
+            ) : <p className={styles.calibrationEmpty}>公共模型暂未连接。旧版评分使用 rules-2026.07 基线；V2 使用独立英雄规则。</p>}
             <dl className={styles.calibrationParameters}>
               <div><dt>高光阈值</dt><dd>{calibrationModel?.highlightThreshold ?? 88}</dd></div>
               <div><dt>副职业奖励</dt><dd>{Math.round((calibrationModel?.secondaryBonusWeight ?? 0.4) * 100)}%</dd></div>
               <div><dt>死亡惩罚系数</dt><dd>{(calibrationModel?.deathPenaltyScale ?? 1).toFixed(2)}</dd></div>
             </dl>
-            <div className={styles.replayActions}>
-              <div>
-                <span>历史重放</span>
-                <strong>{dataset.scoringSnapshot ? `已锁定 ${dataset.scoringSnapshot.modelVersion}` : `当前 ${calibrationModel?.version ?? "rules-2026.07"}`}</strong>
-                <small>{dataset.scoringSnapshot ? `导入报告按 ${new Date(dataset.scoringSnapshot.scoredAt).toLocaleString("zh-CN")} 的模型重算` : "导出后会把本次评分模型一并保存，未来打开不会随新模型漂移"}</small>
-              </div>
-              <button className={styles.replayButton} type="button" onClick={exportReplayReport}>导出可重放报告</button>
-            </div>
             <div className={styles.calibrationGovernance} aria-label="模型版本治理状态">
               <div>
                 <span>当前通道</span>
@@ -982,6 +1001,11 @@ export default function HaiDouDashboard() {
               </div>
             </div>
             <p className={styles.calibrationPrivacy}>职业少于 {calibrationModel?.minimumRoleSamples ?? 100} 局时仅显示收集进度，不改该职业基线。新版本先进入匿名灰度分桶，异常样本或参数漂移越界时回滚到最近稳定版本。</p>
+          </div>
+          </details>
+          <div className={styles.replayActions}>
+            <div><span>历史重放</span><strong>{scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : dataset.scoringSnapshot?.modelVersion ?? calibrationModel?.version ?? "rules-2026.07"}</strong><small>{scoreEngine === "performance-v2" ? "导出包含规则版本和全部参考对局，不混用旧版社区参数。不同规则版本不自动重算。" : "导出保存当前模型快照，用于旧版评分重放。"}</small></div>
+            <button className={styles.replayButton} type="button" onClick={exportReplayReport}>导出可重放报告</button>
           </div>
         </section>
 
@@ -1077,14 +1101,14 @@ export default function HaiDouDashboard() {
               ))}
               <p className={styles.rankCoverage}>基于 {dataset.matches.length} 场海斗的最终装备栏统计。消耗品和未完成的小件也会按客户端记录保留。</p>
             </div>
-          ) : <p className={styles.emptyState}>当前导入数据没有装备字段。使用 V13 数据助手重新同步后即可生成出装偏好。</p>}
+          ) : <p className={styles.emptyState}>当前导入数据没有装备字段。可导入含装备的 JSON 或重新同步；不影响其他维度。</p>}
         </section>
 
         <section className={styles.matchesSection} aria-labelledby="matches-title">
           <div className={styles.matchesHeader}>
             <div className={styles.sectionHeading}>
               <div><span>比赛时间带</span><h2 id="matches-title">近期对局</h2></div>
-              <small>主职业完整计分 + 副职业 {Math.round((calibrationModel?.secondaryBonusWeight ?? 0.4) * 100)}% 奖励，死亡规则仅计算一次</small>
+              <small>{scoreEngine === "performance-v2" ? "V2 副职业仅奖励超基线表现，最多 +6；每局可展开核对参考基数" : `主职业完整计分 + 副职业 ${Math.round((calibrationModel?.secondaryBonusWeight ?? 0.4) * 100)}% 奖励，死亡规则仅计算一次`}</small>
             </div>
             <div className={styles.segmented} aria-label="筛选近期对局">
               {(["全部", "胜利", "失败"] as MatchFilter[]).map((option) => (
@@ -1093,13 +1117,13 @@ export default function HaiDouDashboard() {
             </div>
           </div>
           <div className={styles.matchList}>
-            {visibleMatches.map((item) => <MatchRow key={item.match.id} item={item} highlightThreshold={calibrationModel?.highlightThreshold ?? 88} />)}
+            {visibleMatches.map((item) => <MatchRow key={item.match.id} item={item} highlightThreshold={scoreEngine === "performance-v2" ? 88 : calibrationModel?.highlightThreshold ?? 88} />)}
           </div>
         </section>
 
         <aside className={styles.methodNote}>
           <span>评分说明</span>
-          <p>当前评分优先读取版本化社区校准模型；职业不足 100 份真实匿名样本时继续使用固定基线。双职业保留主职业完整正向分，再按模型权重加入副职业奖励；死亡与“作弊：我能回城！”规则只应用一次。数据质量分仅解释字段覆盖，不参与操作评分。</p>
+          <p>{scoreEngine === "performance-v2" ? "V2 为规则试算：70 分为参考基线，英雄特征决定维度权重。至少 5 场同英雄、同版本、相近时长的个人历史才参与基准调整，且排除本场。经济占比不直接加分，缺失项不当零分；副职业只加分，不均分。尚不能评价技能命中、走位或关键团战决策，也不是全服实力分。" : "旧版优先读取版本化社区校准模型，样本不足时使用固定职业基线。主职业完整计分，再加入副职业奖励；死亡与回城规则只应用一次。"}</p>
         </aside>
       </main>
 

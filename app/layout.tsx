@@ -30,9 +30,9 @@ const themeBootScript = `
   (function () {
     try {
       var saved = localStorage.getItem('haidou-theme');
-      document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';
     } catch (_) {
-      document.documentElement.dataset.theme = 'light';
+      document.documentElement.dataset.theme = 'dark';
     }
   })();
 `;

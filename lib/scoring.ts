@@ -10,6 +10,7 @@ import type {
 import { ROLES } from "./types";
 import { combineRoleScores } from "./role-scoring.mjs";
 import { aggregatePlayerPreferences, reliableRoleScore } from "./player-summary.mjs";
+import { evaluatePerformance } from "./performance-v2.mjs";
 
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
@@ -149,10 +150,10 @@ export function scoreMatch(match: MatchRecord, calibration?: CalibrationModel | 
   };
 }
 
-export function summarizePlayer(dataset: PlayerDataset, calibration?: CalibrationModel | null): PlayerSummary {
+export function summarizePlayer(dataset: PlayerDataset, calibration?: CalibrationModel | null, engine: "legacy" | "performance-v2" = "legacy"): PlayerSummary {
   const scoredMatches = [...dataset.matches]
     .sort((a, b) => Date.parse(b.playedAt) - Date.parse(a.playedAt))
-    .map((match) => scoreMatch(match, calibration));
+    .map((match) => engine === "performance-v2" ? evaluatePerformance(match, dataset.matches) as ScoredMatch : scoreMatch(match, calibration));
   const wins = dataset.matches.filter((match) => match.win).length;
   const confidenceFactor = dataset.matches.length / (dataset.matches.length + 10);
   const weighted = scoredMatches.reduce(
@@ -162,7 +163,8 @@ export function summarizePlayer(dataset: PlayerDataset, calibration?: Calibratio
     },
     { total: 0, weight: 0 },
   );
-  const rawAverage = weighted.weight ? weighted.total / weighted.weight : 50;
+  const neutral = engine === "performance-v2" ? 70 : 50;
+  const rawAverage = weighted.weight ? weighted.total / weighted.weight : neutral;
 
   const roleScores = ROLES.map((role) => {
     const roleMatches = scoredMatches.filter((item) => item.match.role === role);
@@ -173,7 +175,7 @@ export function summarizePlayer(dataset: PlayerDataset, calibration?: Calibratio
       role,
       games: roleMatches.length,
       score,
-      reliableScore: reliableRoleScore(score, roleMatches.length),
+      reliableScore: reliableRoleScore(score, roleMatches.length, neutral),
     };
   });
 
@@ -182,7 +184,7 @@ export function summarizePlayer(dataset: PlayerDataset, calibration?: Calibratio
   return {
     scoredMatches,
     overallScore:
-      dataset.matches.length >= 5 ? Math.round(50 + confidenceFactor * (rawAverage - 50)) : null,
+      dataset.matches.length >= 5 ? Math.round(neutral + confidenceFactor * (rawAverage - neutral)) : null,
     confidence: Math.round(confidenceFactor * 100),
     wins,
     winRate: Math.round((wins / Math.max(dataset.matches.length, 1)) * 100),
@@ -190,6 +192,6 @@ export function summarizePlayer(dataset: PlayerDataset, calibration?: Calibratio
     heroes,
     augments,
     favoriteItems,
-    highlights: scoredMatches.filter((item) => item.score >= (calibration?.highlightThreshold ?? 88)).slice(0, 5),
+    highlights: scoredMatches.filter((item) => item.score >= (engine === "performance-v2" ? 88 : calibration?.highlightThreshold ?? 88) && (!item.evaluation || item.evaluation.coverage >= 80)).slice(0, 5),
   };
 }

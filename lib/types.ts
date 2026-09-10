@@ -24,6 +24,11 @@ export type MatchRecord = {
   playedAt: string;
   patch: string;
   champion: string;
+  championId?: string;
+  championKey?: string;
+  augmentIds?: string[];
+  itemIds?: string[];
+  teamTotals?: Partial<Pick<MatchMetrics, "damage" | "gold" | "controlSeconds">> & { participants: number };
   role: Role;
   secondaryRole?: Role;
   win: boolean;
@@ -54,6 +59,8 @@ export type PlayerDataset = {
     updatedAt: string;
   };
   matches: MatchRecord[];
+  scoringEngine?: "legacy" | "performance-v2";
+  scoringEngineVersion?: string;
   scoringSnapshot?: {
     modelVersion: string;
     scoredAt: string;
@@ -140,9 +147,13 @@ export type DimensionScore = {
   label: string;
   score: number;
   displayValue: string;
+  missing?: boolean;
+  expected?: string;
+  samples?: number;
 };
 
 export type ScoredMatch = {
+  evaluation?: { version: string; baseline: number; coverage: number; peers: number; championSpecific: boolean; basis: string; provisional: boolean };
   match: MatchRecord;
   score: number;
   positiveScore: number;

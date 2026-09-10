@@ -14,7 +14,7 @@ namespace HaiDou.Installer
 {
     internal static class Program
     {
-        internal const string ProductVersion = "0.5.3";
+        internal const string ProductVersion = "0.6.0";
         internal const int ApiVersion = 17;
         internal const string WebsiteUrl = "https://haxiaxiaozio-art.github.io/lol-haidou/?v=11";
         internal static readonly string LogPath = Path.Combine(Path.GetTempPath(), "HaiDouHelper-install.log");
@@ -322,7 +322,7 @@ namespace HaiDou.Installer
             string current = health != null ? "应用 " + (string.IsNullOrWhiteSpace(installed) ? "未知" : installed) + "  ·  接口 V" + health.Version : string.IsNullOrWhiteSpace(installed) ? "尚未安装" : "应用 " + installed + "  ·  当前未运行";
             card.Controls.Add(LabelAt(current, 18, 38, 335, 30, 11.5f, Color.FromArgb(28, 39, 55), FontStyle.Bold));
             card.Controls.Add(LabelAt("安装后", 403, 14, 80, 22, 9, Color.FromArgb(101, 113, 130), FontStyle.Regular));
-            Label target = LabelAt("应用 0.5.3  ·  接口 V17", 392, 38, 166, 30, 10.5f, Color.FromArgb(20, 126, 86), FontStyle.Bold);
+            Label target = LabelAt("应用 0.6.0  ·  接口 V17", 392, 38, 166, 30, 10.5f, Color.FromArgb(20, 126, 86), FontStyle.Bold);
             target.TextAlign = ContentAlignment.MiddleRight;
             card.Controls.Add(target);
 

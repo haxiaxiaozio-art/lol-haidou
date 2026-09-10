@@ -404,7 +404,7 @@
   .snapshotStats div:nth-child(2) { border-right: 0; }
   .snapshotStats div:nth-last-child(-n+2) { border-bottom: 0; }
   .augmentSection, .itemSection { grid-template-columns: 1fr; gap: 8px; }
-  .augmentRank, .itemRank { grid-template-columns: 1fr; }
+  .augmentRank, .itemRank { grid-template-columns: minmax(0, 1fr); }
   .highlightRail { grid-template-columns: 1fr; }
   .matchRow { grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; padding-block: 18px; }
   .kdaBlock { grid-column: 1; }
@@ -464,6 +464,7 @@
   .importActions { align-items: flex-start; flex-direction: column; }
   .importActions button, .primaryButton { width: auto; }
   .sectionHeading { align-items: start; }
+  .augmentRank > div { grid-template-columns: 22px minmax(0, 1fr) minmax(30px, .5fr) 44px; gap: 8px; }
   .sectionHeading small { max-width: 18ch; }
   .roleBar { grid-template-columns: 76px minmax(70px, 1fr) 34px; gap: 10px; }
   .roleBar > div:first-child { display: grid; }

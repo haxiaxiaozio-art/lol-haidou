@@ -144,6 +144,23 @@ function durationMinutes(game, stats) {
   return 0.1;
 }
 
+function completeTeamTotals(game, participant) {
+  if (!participant.teamId) return undefined;
+  const team = (game.participants ?? game.participantList ?? []).filter((p) => p.teamId === participant.teamId);
+  if (team.length !== 5) return undefined;
+  const total = { participants: team.length };
+  const fields = { damage: ["totalDamageDealtToChampions", "damageDealtToChampions"], gold: ["goldEarned"], controlSeconds: ["timeCCingOthers", "totalTimeCCDealt", "totalTimeCrowdControlDealt"] };
+  for (const [key, aliases] of Object.entries(fields)) {
+    const field = aliases.find((f) => team.every((p) => {
+      const value = (p.stats ?? p)[f];
+      return value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+    }));
+    const playerField = aliases.find((f) => (participant.stats ?? participant)[f] !== undefined && (participant.stats ?? participant)[f] !== null && (participant.stats ?? participant)[f] !== "");
+    if (field && field === playerField) total[key] = team.reduce((sum, p) => sum + Number((p.stats ?? p)[field]), 0);
+  }
+  return total;
+}
+
 export function normalizeMatch(game, context) {
   const participant = locateParticipant(game, context.player);
   if (!participant) return null;
@@ -176,6 +193,11 @@ export function normalizeMatch(game, context) {
     playedAt: gameTime(game),
     patch: patchParts.length >= 2 ? `${patchParts[0]}.${patchParts[1]}` : gameVersion,
     champion: String(championName),
+    championId,
+    championKey: champion.alias || undefined,
+    augmentIds: augments,
+    itemIds: items,
+    teamTotals: completeTeamTotals(game, participant),
     role: roles.role,
     ...(roles.secondaryRole ? { secondaryRole: roles.secondaryRole } : {}),
     win: Boolean(firstValue(stats?.win, participant?.win, false)),
