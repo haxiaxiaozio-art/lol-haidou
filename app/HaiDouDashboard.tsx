@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { DEMO_DATASET } from "../lib/demo-data";
-import { importDataset, CSV_HEADERS } from "../lib/importers";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { buildMatchCommentary } from "../lib/match-commentary.mjs";
 import { fetchCommunityCalibration } from "../lib/calibration-client";
 import { analyzeDataQuality, type SourceDiagnostics } from "../lib/data-quality";
@@ -20,15 +18,16 @@ import type { CalibrationModel, LocalClientPlayer, MatchRecord, NetworkRatingEst
 import styles from "./page.module.css";
 import upgrade from "./upgrade.module.css";
 import PerformancePanel from "./PerformancePanel";
+import PlayerPreferences from "./PlayerPreferences";
 import ReportLibrary from "./ReportLibrary";
 import MatchAssets from "./MatchAssets";
 import { PERFORMANCE_VERSION } from "../lib/performance-v2.mjs";
 
 type MatchFilter = "全部" | "胜利" | "失败";
-type SourceMode = "demo" | "file" | "search" | "local" | "library";
+type SourceMode = "search" | "local" | "library";
 type FlowStatus = "idle" | "resolving" | "connected" | "syncing" | "scoring" | "ready";
 
-const REGIONS = ["艾欧尼亚", "黑色玫瑰", "峡谷之巅", "联盟一区", "联盟二区", "联盟三区", "联盟四区", "联盟五区"];
+const EMPTY_DATASET: PlayerDataset = { schemaVersion: 1, source: "local-client", player: { gameName: "", tag: "", region: "", updatedAt: "" }, matches: [] };
 const FLOW_STATUS_COPY: Record<FlowStatus, string> = {
   idle: "选择一种数据来源开始",
   resolving: "正在确认玩家身份",
@@ -153,38 +152,6 @@ const resultLabel = (score: number, highlightThreshold = 88) => {
 const roleLabel = (match: MatchRecord) =>
   match.secondaryRole ? `${match.role} / ${match.secondaryRole}` : match.role;
 
-const csvEscape = (value: string | number | boolean) => {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-};
-
-const matchToCsvRow = (match: MatchRecord) => [
-  match.id,
-  match.playedAt,
-  match.patch,
-  match.champion,
-  match.role,
-  match.secondaryRole ?? "",
-  match.win,
-  match.durationMinutes,
-  match.kills,
-  match.deaths,
-  match.assists,
-  match.metrics.damage,
-  match.metrics.controlSeconds,
-  match.metrics.healing,
-  match.metrics.shielding,
-  match.metrics.mitigated,
-  match.metrics.damageTaken,
-  match.metrics.selfHealing,
-  match.metrics.gold,
-  match.augments.join("|"),
-  (match.items ?? []).join("|"),
-  match.recall?.pickedAtMinute ?? "",
-  match.recall?.deathsBefore ?? "",
-  match.recall?.deathsAfter ?? "",
-];
-
 function downloadBlob(content: string, type: string, fileName: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const anchor = document.createElement("a");
@@ -266,13 +233,10 @@ function MatchRow({ item, highlightThreshold }: { item: ScoredMatch; highlightTh
 }
 
 export default function HaiDouDashboard() {
-  const [dataset, setDataset] = useState<PlayerDataset>(DEMO_DATASET);
+  const [dataset, setDataset] = useState<PlayerDataset>(EMPTY_DATASET);
   const [filter, setFilter] = useState<MatchFilter>("全部");
-  const [sourceMode, setSourceMode] = useState<SourceMode>("library");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("search");
   const [scoreEngine, setScoreEngine] = useState<"legacy" | "performance-v2">("performance-v2");
-  const [region, setRegion] = useState(DEMO_DATASET.player.region);
-  const [gameName, setGameName] = useState(DEMO_DATASET.player.gameName);
-  const [tagLine, setTagLine] = useState(DEMO_DATASET.player.tag);
   const [searchGameName, setSearchGameName] = useState("");
   const [searchTagLine, setSearchTagLine] = useState("");
   const [matchCount, setMatchCount] = useState(20);
@@ -282,16 +246,14 @@ export default function HaiDouDashboard() {
   const [localPlayer, setLocalPlayer] = useState<LocalClientPlayer | null>(null);
   const [localConnection, setLocalConnection] = useState<LocalConnectionProbe>(INITIAL_CONNECTION);
   const [syncDiagnostics, setSyncDiagnostics] = useState<SyncDiagnostic[]>([]);
-  const [importMessage, setImportMessage] = useState("尚未导入文件，当前展示完整演示数据。");
-  const [importError, setImportError] = useState("");
   const [networkRating, setNetworkRating] = useState<NetworkRatingEstimate | null>(null);
   const [calibrationModel, setCalibrationModel] = useState<CalibrationModel | null>(null);
   const [calibrationError, setCalibrationError] = useState("");
   const [calibrationConsent, setCalibrationConsent] = useState(false);
   const [sourceDiagnostics, setSourceDiagnostics] = useState<SourceDiagnostics>({
-    requestedCount: DEMO_DATASET.matches.length,
-    scannedCount: DEMO_DATASET.matches.length,
-    haidouCount: DEMO_DATASET.matches.length,
+    requestedCount: null,
+    scannedCount: 0,
+    haidouCount: 0,
   });
   const summary = useMemo(() => summarizePlayer(dataset, calibrationModel, scoreEngine), [dataset, calibrationModel, scoreEngine]);
   const dataQuality = useMemo(
@@ -346,69 +308,17 @@ export default function HaiDouDashboard() {
     localStorage.setItem("haidou-theme", next);
   };
 
-  const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setImportError("");
-    setImportMessage(`正在读取 ${file.name}`);
-    try {
-      const imported = await importDataset(file);
-      setDataset(imported);
-      setScoreEngine(imported.scoringEngine ?? "performance-v2");
-      if (imported.scoringSnapshot) {
-        setCalibrationModel(imported.scoringSnapshot.model);
-        setCalibrationError("");
-      }
-      setNetworkRating(null);
-      setSourceDiagnostics({ requestedCount: null, scannedCount: imported.matches.length, haidouCount: imported.matches.length });
-      setFilter("全部");
-      setFlowStatus("ready");
-      setFlowDetail(`本地文件已提供 ${imported.matches.length} 场对局`);
-      setImportMessage(`已导入 ${file.name}，共 ${imported.matches.length} 局。数据仅保存在当前页面。`);
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : "无法读取该文件");
-      setImportMessage("导入未完成，仍保留上一次可用数据。");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const resetDemo = () => {
-    setDataset(DEMO_DATASET);
-    setNetworkRating(null);
-    setSourceDiagnostics({ requestedCount: DEMO_DATASET.matches.length, scannedCount: DEMO_DATASET.matches.length, haidouCount: DEMO_DATASET.matches.length });
-    setRegion(DEMO_DATASET.player.region);
-    setGameName(DEMO_DATASET.player.gameName);
-    setTagLine(DEMO_DATASET.player.tag);
-    setSourceMode("demo");
-    setFlowStatus("ready");
-    setFlowDetail(`已恢复全部 ${DEMO_DATASET.matches.length} 场演示对局`);
-    setLookupError("");
-    setImportError("");
-    setImportMessage("已恢复完整演示数据。");
-  };
-
   const changeSource = (nextSource: SourceMode) => {
     setSourceMode(nextSource);
-    if (nextSource === "local" && localPlayer) {
-      setGameName(localPlayer.gameName);
-      setTagLine(localPlayer.tag);
-      setRegion(localPlayer.region);
-    }
     setFlowStatus("idle");
     setFlowDetail(
-      nextSource === "library" ? "历史战报无需助手；云端新战绩接口暂未接入授权来源" : nextSource === "demo"
-        ? "演示数据最多提供 31 场流程样本"
-        : nextSource === "file"
-          ? "文件最多导入 500 场，不受扫描档位影响"
-          : nextSource === "search"
+      nextSource === "library" ? "已保存战报可直接打开，或恢复 JSON 备份" : nextSource === "search"
             ? localPlayer
               ? `可以检索 ${localPlayer.region} 的玩家战绩`
               : "检索其他玩家前需要登录 LOL 客户端"
             : localConnection.message,
     );
     setLookupError("");
-    setImportError("");
   };
 
   const connectLocalClient = async () => {
@@ -421,9 +331,6 @@ export default function HaiDouDashboard() {
     if (connection.player) {
       const player = connection.player;
       setLocalPlayer(player);
-      setGameName(player.gameName);
-      setTagLine(player.tag);
-      setRegion(player.region);
       setFlowStatus("connected");
       setFlowDetail(`已识别 ${player.gameName}#${player.tag} · ${player.region}`);
       return;
@@ -496,9 +403,6 @@ export default function HaiDouDashboard() {
       });
       setSyncDiagnostics(result.diagnostics);
       setLocalPlayer(result.dataset.player);
-      setGameName(result.dataset.player.gameName);
-      setTagLine(result.dataset.player.tag);
-      setRegion(result.dataset.player.region);
       setFilter("全部");
       setFlowStatus("ready");
       setFlowDetail(`读取 ${result.scannedCount} 场，导入 ${result.haidouCount} 场海斗${result.calibrationAccepted ? `，新增 ${result.calibrationAccepted} 份匿名校准样本` : ""}${result.calibrationQuarantined ? `，隔离 ${result.calibrationQuarantined} 份异常样本` : ""}`);
@@ -596,66 +500,6 @@ export default function HaiDouDashboard() {
     });
   };
 
-  const runDemoLookup = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const normalizedName = gameName.trim();
-    const normalizedTag = tagLine.trim().replace(/^#/, "");
-    if (normalizedName.length < 2) {
-      setLookupError("游戏名至少需要 2 个字符。");
-      return;
-    }
-    if (normalizedTag.length < 2 || normalizedTag.length > 6) {
-      setLookupError("尾标需要 2 到 6 个字符，不用输入井号。");
-      return;
-    }
-
-    setLookupError("");
-    setFlowStatus("resolving");
-    await wait(320);
-    setFlowStatus("syncing");
-    await wait(420);
-    setFlowStatus("scoring");
-    await wait(380);
-
-    const availableMatchCount = Math.min(matchCount, DEMO_DATASET.matches.length);
-    const nextDataset: PlayerDataset = {
-      ...DEMO_DATASET,
-      player: {
-        gameName: normalizedName,
-        tag: normalizedTag,
-        region,
-        updatedAt: new Date().toISOString(),
-      },
-      matches: DEMO_DATASET.matches.slice(0, availableMatchCount),
-    };
-    setDataset(nextDataset);
-    setNetworkRating(null);
-    setSourceDiagnostics({ requestedCount: matchCount, scannedCount: availableMatchCount, haidouCount: availableMatchCount });
-    setFilter("全部");
-    setImportMessage(`已用演示对局生成 ${normalizedName}#${normalizedTag} 的流程预览。`);
-    setFlowStatus("ready");
-    setFlowDetail(
-      availableMatchCount < matchCount
-        ? `请求 ${matchCount} 场，演示数据实际提供 ${availableMatchCount} 场`
-        : `已按选择准备 ${availableMatchCount} 场对局`,
-    );
-    scrollToReport();
-  };
-
-  const downloadTemplate = (kind: "csv" | "json") => {
-    const sampleMatches = DEMO_DATASET.matches.slice(0, 2);
-    if (kind === "json") {
-      downloadBlob(
-        JSON.stringify({ ...DEMO_DATASET, source: "imported", matches: sampleMatches }, null, 2),
-        "application/json;charset=utf-8",
-        "海斗导入模板.json",
-      );
-      return;
-    }
-    const rows = [CSV_HEADERS, ...sampleMatches.map(matchToCsvRow)];
-    downloadBlob(`\uFEFF${rows.map((row) => row.map(csvEscape).join(",")).join("\n")}`, "text/csv;charset=utf-8", "海斗导入模板.csv");
-  };
-
   const exportReplayReport = () => {
     const replayDataset = { ...withScoringSnapshot(dataset, calibrationModel), scoringEngine: scoreEngine, scoringEngineVersion: scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined };
     const safeName = dataset.player.gameName.replace(/[\\/:*?"<>|]/g, "_");
@@ -676,11 +520,8 @@ export default function HaiDouDashboard() {
   const topRole = [...summary.roleScores].filter((role) => role.games > 0).sort((a, b) => b.reliableScore - a.reliableScore || b.games - a.games)[0];
   const displayedHeroes = summary.heroes.slice(0, 10);
   const displayedHeroGames = displayedHeroes.reduce((total, hero) => total + hero.games, 0);
-  const displayedAugments = summary.augments.slice(0, 12);
-  const totalAugmentPicks = summary.augments.reduce((total, augment) => total + augment.picks, 0);
-  const displayedAugmentPicks = displayedAugments.reduce((total, augment) => total + augment.picks, 0);
-  const topAugmentPicks = displayedAugments[0]?.picks ?? 1;
   const displayedItems = summary.favoriteItems.slice(0, 10);
+  const hasReport = dataset.source !== "demo" && dataset.matches.length > 0;
 
   return (
     <>
@@ -719,82 +560,25 @@ export default function HaiDouDashboard() {
             </ol>
           </div>
 
-          <div className={`${styles.sourceTabs} ${upgrade.fiveTabs}`} role="tablist" aria-label="选择数据来源">
-            <button type="button" role="tab" aria-selected={sourceMode === "library"} onClick={() => changeSource("library")}>
+          <div className={`${styles.sourceTabs} ${upgrade.threeTabs}`} role="tablist" aria-label="选择数据来源">
+            <button type="button" role="tab" disabled={isFlowBusy} aria-selected={sourceMode === "library"} onClick={() => changeSource("library")}>
               <span>我的战报库</span><small>关闭游戏，也能回来复盘</small>
             </button>
-            <button type="button" role="tab" aria-selected={sourceMode === "demo"} onClick={() => changeSource("demo")}>
-              <span>演示检索</span><small>无需文件，立即体验</small>
-            </button>
-            <button type="button" role="tab" aria-selected={sourceMode === "file"} onClick={() => changeSource("file")}>
-              <span>CSV / JSON</span><small>数据只在当前页面处理</small>
-            </button>
-            <button type="button" role="tab" aria-selected={sourceMode === "search"} onClick={() => changeSource("search")}>
+            <button type="button" role="tab" disabled={isFlowBusy} aria-selected={sourceMode === "search"} onClick={() => changeSource("search")}>
               <span>检索玩家</span><small>查询当前客户端所在大区</small>
             </button>
-            <button type="button" role="tab" aria-selected={sourceMode === "local"} onClick={() => changeSource("local")}>
+            <button type="button" role="tab" disabled={isFlowBusy} aria-selected={sourceMode === "local"} onClick={() => changeSource("local")}>
               <span>我的战绩</span><small>读取当前登录玩家，不需要密码</small>
             </button>
           </div>
 
           <div className={styles.flowBody}>
-            {sourceMode === "library" ? <ReportLibrary dataset={{ ...withScoringSnapshot(dataset, calibrationModel), scoringEngine: scoreEngine, scoringEngineVersion: scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined }} onOpen={(loaded) => {
+            {sourceMode === "library" ? <ReportLibrary dataset={hasReport ? { ...withScoringSnapshot(dataset, calibrationModel), scoringEngine: scoreEngine, scoringEngineVersion: scoreEngine === "performance-v2" ? PERFORMANCE_VERSION : undefined } : null} onOpen={(loaded) => {
               setDataset(loaded); setScoreEngine(loaded.scoringEngine ?? "performance-v2"); setNetworkRating(null);
               setCalibrationModel(loaded.scoringSnapshot?.model ?? null);
               setSourceDiagnostics({ requestedCount: null, scannedCount: loaded.matches.length, haidouCount: loaded.matches.length });
               setFlowStatus("ready"); setFlowDetail("已打开本地历史战报，这不是新同步的战绩"); setFilter("全部"); scrollToReport();
-            }} /> : sourceMode === "demo" ? (
-              <form className={styles.lookupForm} onSubmit={runDemoLookup} noValidate>
-                <label>
-                  <span>大区</span>
-                  <select value={region} onChange={(event) => setRegion(event.target.value)} disabled={isFlowBusy}>
-                    {REGIONS.map((item) => <option key={item}>{item}</option>)}
-                  </select>
-                </label>
-                <label className={styles.nameField}>
-                  <span>游戏名</span>
-                  <input value={gameName} onChange={(event) => setGameName(event.target.value)} placeholder="例如：夜航船" disabled={isFlowBusy} />
-                </label>
-                <label>
-                  <span>尾标</span>
-                  <span className={styles.tagInput}><b>#</b><input value={tagLine} onChange={(event) => setTagLine(event.target.value)} placeholder="0927" disabled={isFlowBusy} /></span>
-                </label>
-                <label>
-                  <span>战绩扫描上限</span>
-                  <select value={matchCount} onChange={(event) => setMatchCount(Number(event.target.value))} disabled={isFlowBusy}>
-                    <option value={20}>20 场</option>
-                    <option value={40}>40 场</option>
-                    <option value={100}>100 场</option>
-                    <option value={200}>200 场</option>
-                  </select>
-                </label>
-                <button className={styles.queryButton} type="submit" disabled={isFlowBusy}>
-                  {isFlowBusy ? "正在生成" : "生成演示战报"}
-                </button>
-                {lookupError && <p className={styles.lookupError} role="alert">{lookupError}</p>}
-              </form>
-            ) : sourceMode === "file" ? (
-              <div className={styles.fileFlow}>
-                <div>
-                  <h2>导入标准对局文件</h2>
-                  <p>{importMessage}</p>
-                  <div className={styles.importActions}>
-                    <label className={styles.primaryButton}>
-                      选择数据文件
-                      <input type="file" accept=".csv,.json,application/json,text/csv" onChange={onFileChange} />
-                    </label>
-                    <button type="button" onClick={() => downloadTemplate("csv")}>下载 CSV 模板</button>
-                    <button type="button" onClick={() => downloadTemplate("json")}>下载 JSON 模板</button>
-                    <button type="button" onClick={resetDemo}>恢复演示数据</button>
-                  </div>
-                  {importError && <p className={styles.importError} role="alert">{importError}</p>}
-                </div>
-                <div className={styles.schemaNote}>
-                  <span>格式要求</span>
-                  <p>单份文件最多 500 场、5 MB。主、副职业仅接受辅助、法师、刺客、坦克、射手、战士，副职业可留空。海克斯使用竖线分隔，回城局补充选择时间与前后死亡数。</p>
-                </div>
-              </div>
-            ) : sourceMode === "search" ? (
+            }} /> : sourceMode === "search" ? (
               <div className={styles.searchPlayerFlow}>
                 <div className={styles.searchClientLine} data-status={localConnection.status}>
                   <span className={styles.clientStatusMark} aria-hidden="true" />
@@ -885,11 +669,12 @@ export default function HaiDouDashboard() {
           </div>
         </section>
 
+        {hasReport ? <>
         <section id="player-report" className={styles.profileBand} aria-labelledby="player-name">
           <div className={styles.profileCopy}>
             <div className={styles.eyebrowRow}>
               <span>{dataset.player.region}</span>
-              <span>{dataset.source === "demo" ? "演示检索" : dataset.source === "local-client" ? "LOL 客户端" : "本地导入"}</span>
+              <span>{dataset.source === "local-client" ? "LOL 客户端" : "恢复的战报"}</span>
             </div>
             <h1 id="player-name">{dataset.player.gameName}<span>#{dataset.player.tag}</span></h1>
             <p>最近 {dataset.matches.length} 局海斗复盘。{scoreEngine === "performance-v2" ? "英雄特征与多维表现试算，不代表官方实力分。" : "旧版职业评分，保留历史对照。"}</p>
@@ -924,6 +709,7 @@ export default function HaiDouDashboard() {
           <label>选择算法<select value={scoreEngine} onChange={(e) => setScoreEngine(e.target.value as "legacy" | "performance-v2")}><option value="performance-v2">V2 多维表现 · 试算</option><option value="legacy">旧版职业评分 · 对照</option></select></label>
           <button type="button" onClick={() => { changeSource("library"); document.getElementById("flow-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>保存 / 打开战报</button>
         </div>
+        <PlayerPreferences key={`${dataset.player.region}/${dataset.player.gameName}#${dataset.player.tag}/${dataset.player.updatedAt}`} matches={dataset.matches} />
         <PerformancePanel dataset={dataset} />
 
         <section className={styles.qualitySection} aria-labelledby="quality-title">
@@ -1063,25 +849,7 @@ export default function HaiDouDashboard() {
                 </article>
               ))}
             </div>
-          ) : <p className={styles.emptyState}>当前数据没有达到 88 分的高光局。继续导入对局后再观察。</p>}
-        </section>
-
-        <section className={styles.augmentSection} aria-labelledby="augments-title">
-          <div className={styles.sectionHeading}>
-            <div><span>选择偏好</span><h2 id="augments-title">常选海克斯</h2></div>
-            <small>仅展示频次，不展示胜率</small>
-          </div>
-          <div className={styles.augmentRank}>
-            {displayedAugments.map((augment, index) => (
-              <div key={augment.name}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <strong>{augment.name}</strong>
-                <div className={styles.miniTrack}><span style={{ width: `${Math.round((augment.picks / topAugmentPicks) * 100)}%` }} /></div>
-                <small>{augment.picks} 次</small>
-              </div>
-            ))}
-            <p className={styles.rankCoverage}>共统计 {summary.augments.length} 种海克斯、{totalAugmentPicks} 次选择。前 12 项覆盖 {displayedAugmentPicks} 次。</p>
-          </div>
+          ) : <p className={styles.emptyState}>当前数据没有达到 88 分的高光局。同步更多对局后再观察。</p>}
         </section>
 
         <section className={styles.itemSection} aria-labelledby="items-title">
@@ -1125,10 +893,15 @@ export default function HaiDouDashboard() {
           <span>评分说明</span>
           <p>{scoreEngine === "performance-v2" ? "V2 为规则试算：70 分为参考基线，英雄特征决定维度权重。至少 5 场同英雄、同版本、相近时长的个人历史才参与基准调整，且排除本场。经济占比不直接加分，缺失项不当零分；副职业只加分，不均分。尚不能评价技能命中、走位或关键团战决策，也不是全服实力分。" : "旧版优先读取版本化社区校准模型，样本不足时使用固定职业基线。主职业完整计分，再加入副职业奖励；死亡与回城规则只应用一次。"}</p>
         </aside>
+        </> : <section id="player-report" className={upgrade.emptyReport} aria-labelledby="empty-report-title">
+          <h2 id="empty-report-title">{isFlowBusy ? "正在准备你的战报" : flowStatus === "ready" ? "本次没有可分析的海斗对局" : "先找到玩家，再聊这局打得怎么样。"}</h2>
+          <p>{isFlowBusy ? flowDetail : flowStatus === "ready" ? `已读取 ${sourceDiagnostics.scannedCount ?? 0} 场战绩，其中没有可用海斗记录。可以提高扫描上限后重试。` : "同步客户端战绩，或打开已保存的战报后，这里会展示评分、常用英雄和海克斯排行。"}</p>
+          <small>常驻查询尚未开放。获取新战绩仍需在本机登录 LOL 并运行助手。</small>
+        </section>}
       </main>
 
       <footer className={styles.footer}>
-        <span>海斗战报 MVP · 默认本机分析 · 真实样本仅在本人主动勾选后匿名贡献</span>
+        <span>海斗战报 · 网页更新 2026.09.10 · 默认本机分析 · 真实样本仅在本人主动勾选后匿名贡献</span>
         <nav aria-label="页脚"><a href="./privacy/">隐私说明</a><a href="./terms/">使用边界</a></nav>
       </footer>
     </>

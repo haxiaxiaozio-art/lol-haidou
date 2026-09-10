@@ -56,8 +56,14 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
   if (secondaryRole && !ROLES.includes(secondaryRole)) throw new Error(`第 ${index + 1} 局副职业必须是：${ROLES.join("、")}`);
   const durationMinutes = numberValue(value.durationMinutes ?? value.duration_minutes, "对局时长");
   if (durationMinutes <= 0) throw new Error(`第 ${index + 1} 局对局时长必须大于 0`);
+  for (const key of ["augments", "augmentIds", "items", "itemIds"] as const) {
+    const entries = Array.isArray(value[key]) ? value[key] : String(value[key] ?? "").split(/[|；;]/);
+    if (entries.length > 16 || entries.some((item) => !["string", "number"].includes(typeof item) || String(item).length > 120)) {
+      throw new Error(`第 ${index + 1} 局 ${key} 最多 16 项，每项不超过 120 个字符`);
+    }
+  }
   const augments = Array.isArray(value.augments)
-    ? value.augments.map(String).filter(Boolean)
+    ? value.augments.map((item) => String(item).trim())
     : String(value.augments ?? "").split(/[|；;]/).map((item) => item.trim()).filter(Boolean);
   const items = Array.isArray(value.items)
     ? value.items.map(String).filter(Boolean)
@@ -113,8 +119,8 @@ const normalizeMatch = (value: Record<string, unknown>, index: number): MatchRec
     dataQuality: {
       metricsPresent,
       roleSource: "provided",
-      augmentsPresent: value.augments !== undefined,
-      itemsPresent: value.items !== undefined,
+      augmentsPresent: quality?.augmentsPresent !== false && (augments.some(Boolean) || (Array.isArray(value.augmentIds) && value.augmentIds.length > 0)),
+      itemsPresent: quality?.itemsPresent !== false && (value.items !== undefined || value.itemIds !== undefined),
       recallTimeline: hasRecall ? "exact" : "unavailable",
     },
   };
