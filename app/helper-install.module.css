@@ -1,0 +1,37 @@
+.guide { padding: 22px 38px; border-top: 1px solid var(--line); scroll-margin-top: 92px; }
+.intro { display: flex; align-items: center; justify-content: space-between; gap: 20px 32px; }
+.intro > div { min-width: 0; }
+.intro h2 { margin: 0; font-size: 18px; line-height: 1.4; }
+.intro p { margin: 6px 0 0; color: var(--text-2); font-size: 13px; }
+.actions { display: grid; justify-items: center; flex-shrink: 0; }
+.actions a { min-height: 40px; display: inline-flex; align-items: center; color: var(--text-2); font-size: 12px; text-underline-offset: 3px; }
+.actions .download { justify-content: center; min-height: 44px; padding: 8px 20px; border-radius: var(--radius-m); background: var(--accent); color: var(--canvas); font-size: 14px; font-weight: 680; text-decoration: none; transition: transform 150ms, background-color 150ms; }
+.download:active { transform: scale(0.96); }
+.instructions { margin-top: 8px; }
+.instructions > summary { width: fit-content; min-height: 44px; padding-block: 10px; cursor: pointer; color: var(--accent-strong); font-size: 13px; font-weight: 650; }
+.steps { margin: 12px 0 24px; padding-left: 24px; display: grid; gap: 16px; max-width: 90ch; }
+.steps li { padding-left: 6px; }
+.steps li::marker { color: var(--accent-strong); font-weight: 700; }
+.steps strong { font-size: 14px; }
+.steps p { margin: 3px 0 0; color: var(--text-2); font-size: 13px; overflow-wrap: anywhere; }
+.steps a { display: inline-block; min-height: 40px; padding: 8px; color: var(--accent-strong); text-underline-offset: 3px; }
+.steps [aria-disabled="true"] { display: inline-block; min-height: 40px; padding: 8px; color: var(--text-3); cursor: wait; }
+.faq { border-top: 1px solid var(--line); padding-top: 18px; }
+.faq h3 { margin: 0 0 12px; font-size: 15px; }
+.faq dl { margin: 0; max-width: 90ch; font-size: 13px; }
+.faq dt { font-weight: 650; margin-top: 14px; }
+.faq dd { margin: 4px 0 0; color: var(--text-2); }
+@media (hover: hover) {
+  .actions .download:hover { background: var(--accent-strong); }
+  .instructions > summary:hover, .actions a:not(.download):hover { color: var(--text-1); }
+}
+@media (max-width: 820px) {
+  .guide { padding-inline: 28px; }
+  .intro { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .actions { justify-items: start; }
+}
+@media (max-width: 560px) {
+  .guide { padding: 20px; scroll-margin-top: 112px; }
+  .actions { width: 100%; }
+  .actions .download { width: 100%; }
+}

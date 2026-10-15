@@ -21,6 +21,7 @@ import PerformancePanel from "./PerformancePanel";
 import PlayerPreferences from "./PlayerPreferences";
 import ReportLibrary from "./ReportLibrary";
 import MatchAssets from "./MatchAssets";
+import HelperInstallGuide from "./HelperInstallGuide";
 import { PERFORMANCE_VERSION } from "../lib/performance-v2.mjs";
 
 type MatchFilter = "全部" | "胜利" | "失败";
@@ -532,6 +533,7 @@ export default function HaiDouDashboard() {
           <span><strong>海斗战报</strong><small>HAIDOU · 独立复盘工具</small></span>
         </a>
         <div className={styles.headerActions}>
+          <a className={styles.installLink} href="#helper-install-guide">下载与安装</a>
           {(sourceMode === "local" || sourceMode === "search") ? <span className={styles.localBadge} data-status={localConnection.status} title={localConnection.message}>
             <i aria-hidden="true" />{localPlayer ? `${localPlayer.gameName}#${localPlayer.tag}` : CONNECTION_LABEL[localConnection.status]}
           </span> : <span className={styles.localBadge}>查看战报无需登录</span>}
@@ -559,6 +561,8 @@ export default function HaiDouDashboard() {
               })}
             </ol>
           </div>
+
+          <HelperInstallGuide onLaunch={startInstalledHelper} isBusy={isFlowBusy} />
 
           <div className={`${styles.sourceTabs} ${upgrade.threeTabs}`} role="tablist" aria-label="选择数据来源">
             <button type="button" role="tab" disabled={isFlowBusy} aria-selected={sourceMode === "library"} onClick={() => changeSource("library")}>

@@ -8,6 +8,7 @@
 .wordmark strong { font-size: 16px; letter-spacing: 0.02em; }
 .wordmark small { color: var(--text-3); font-size: 11px; margin-top: 4px; }
 .headerActions { display: flex; align-items: center; gap: 12px; }
+.installLink { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent-strong); font-size: 12px; white-space: nowrap; text-underline-offset: 4px; }
 .localBadge { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: 0.05em; color: var(--text-3); }
 .localBadge i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 3px var(--surface-3); }
 .localBadge[data-status="checking"] i { animation: statusPulse 900ms ease-in-out infinite alternate; }
@@ -423,7 +424,7 @@
 }
 
 @media (max-width: 560px) {
-  .topbar { min-height: 64px; }
+  .topbar { min-height: 64px; flex-wrap: wrap; gap: 4px 16px; padding-block: 8px; }
   .localBadge { display: none; }
   .themeButton { min-width: 76px; }
   .shell { padding-top: 22px; }

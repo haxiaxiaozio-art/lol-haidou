@@ -4,7 +4,9 @@
 
 ## 在线版本
 
-[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=20260910-preferences)
+[打开海斗战报在线版](https://haxiaxiaozio-art.github.io/lol-haidou/?v=20261015-install)
+
+网页公开访问，无需登录网站账号。首页和顶部导航均提供“下载与安装”入口，包含 Windows 助手下载、安装目录选择、客户端登录、本地网络权限和常见问题说明。读取新战绩仍需要每位访问者在自己的电脑上运行助手并登录国服 LOL；不会借用网站部署者的客户端。网页继续沿用现有助手安装包，不发布独立桌面版。
 
 在线网站默认打开玩家检索，不展示演示战绩，也不提供 CSV 导入入口。读取新 LOL 战绩时，在同一台 Windows 电脑上安装[海斗数据助手](https://github.com/haxiaxiaozio-art/lol-haidou/releases/latest/download/HaiDouHelperSetup.exe)，并在浏览器提示时允许访问本地网络。已保存的战报和 JSON 备份无需助手即可打开；普通玩家不需要安装 Node.js 或下载源码。本次仅更新网页，沿用 0.6.0 安装包和 V17 协议。
 

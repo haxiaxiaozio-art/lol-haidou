@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { build } from "esbuild";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -40,4 +43,46 @@ test("renders local privacy guidance", async () => {
   assert.match(html, /异常样本/);
   assert.match(html, /保留 365 天/);
   assert.match(html, /服务健康记录/);
+});
+
+test("renders public helper download and installation guidance before connecting", async () => {
+  const response = await render();
+  const html = await response.text();
+  assert.match(html, /href="#helper-install-guide"/);
+  assert.match(html, /id="helper-install-guide"/);
+  assert.match(html, /下载 Windows 助手/);
+  assert.match(html, /href="https:\/\/github\.com\/haxiaxiaozio-art\/lol-haidou\/releases\/latest\/download\/HaiDouHelperSetup\.exe"/);
+  assert.match(html, /安装步骤与常见问题/);
+  assert.match(html, /选择安装位置/);
+  assert.match(html, /同一台 Windows 电脑/);
+  assert.match(html, /href="haidou-helper:\/\/start"/);
+  assert.match(html, /本地网络权限/);
+  assert.match(html, /不要关闭安全防护/);
+  assert.doesNotMatch(html, /HaiDouSetup\.exe/);
+  assert.ok(html.indexOf('id="helper-install-guide"') < html.indexOf('role="tablist"'));
+});
+
+test("helper guide keeps downloads available but prevents launch during an active sync", async () => {
+  const result = await build({
+    stdin: { contents: 'export { default as Guide } from "./app/HelperInstallGuide.tsx"; export { renderToStaticMarkup as render } from "react-dom/server";', resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "tsx" },
+    bundle: true, write: false, platform: "node", format: "cjs", loader: { ".module.css": "empty" }, jsx: "automatic",
+  });
+  const compiled = { exports: {} };
+  new Function("require", "module", "exports", result.outputFiles[0].text)(createRequire(import.meta.url), compiled, compiled.exports);
+  const { Guide, render } = compiled.exports;
+  const onLaunch = () => {};
+  const links = (element) => !element || typeof element !== "object" ? [] : Array.isArray(element) ? element.flatMap(links) : [...(element.type === "a" ? [element.props] : []), ...links(element.props?.children)];
+  for (const isBusy of [false, true]) {
+    const tree = Guide({ isBusy, onLaunch });
+    const html = render(tree);
+    assert.ok(html.includes("HaiDouHelperSetup.exe"));
+    assert.ok(html.includes("安装步骤与常见问题"));
+    const launch = links(tree).find((link) => link.href === "haidou-helper://start");
+    if (isBusy) {
+      assert.equal(launch, undefined, "busy guide must not navigate to the launch protocol");
+      assert.ok(links(tree).every((link) => !link.onClick), "busy guide must not change sync state");
+    } else {
+      assert.equal(launch.onClick, onLaunch);
+    }
+  }
 });
